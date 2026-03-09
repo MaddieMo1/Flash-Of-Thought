@@ -1,0 +1,72 @@
+import os
+import time
+import uuid
+from app.core.config import get_settings
+
+try:
+    import oss2
+    OSS_AVAILABLE = True
+except ImportError:
+    OSS_AVAILABLE = False
+    print("Warning: oss2 module not found. Using local storage.")
+
+settings = get_settings()
+
+class OssService:
+    def __init__(self):
+        # Prefer OSS if configured and available, otherwise fallback to local
+        if OSS_AVAILABLE and settings.STORAGE_PROVIDER == 'oss':
+            self.mode = 'oss'
+            try:
+                self.auth = oss2.Auth(settings.OSS_ACCESS_KEY_ID, settings.OSS_ACCESS_KEY_SECRET)
+                self.bucket = oss2.Bucket(self.auth, settings.OSS_ENDPOINT, settings.OSS_BUCKET_AUDIO)
+            except Exception as e:
+                print(f"Failed to initialize OSS: {e}. Fallback to local storage.")
+                self.mode = 'local'
+                self.local_storage_path = "static/uploads"
+                os.makedirs(self.local_storage_path, exist_ok=True)
+        else:
+            self.mode = 'local'
+            self.local_storage_path = "static/uploads"
+            os.makedirs(self.local_storage_path, exist_ok=True)
+        
+    def upload_file(self, file_content: bytes, file_extension: str = "mp3") -> str:
+        """
+        Upload bytes to OSS or Local and return the file key (path)
+        """
+        filename = f"{int(time.time())}_{uuid.uuid4().hex[:8]}.{file_extension}"
+        
+        if self.mode == 'oss':
+            result = self.bucket.put_object(filename, file_content)
+            
+            if result.status != 200:
+                raise Exception(f"Failed to upload to OSS: {result.status}")
+        else:
+            file_path = os.path.join(self.local_storage_path, filename)
+            with open(file_path, "wb") as f:
+                f.write(file_content)
+            
+        return filename
+
+    def get_file_url(self, object_key: str) -> str:
+        """
+        Get the accessible URL for the file.
+        If OSS_USE_SIGNED_URL is True, returns a signed URL.
+        Otherwise, returns the public URL.
+        """
+        if self.mode == 'oss':
+            if settings.OSS_USE_SIGNED_URL:
+                return self.bucket.sign_url('GET', object_key, settings.OSS_SIGNED_URL_EXPIRE_SEC)
+            else:
+                # Assuming public read permission or CNAME setup
+                if settings.OSS_PUBLIC_BASE_URL:
+                    return f"{settings.OSS_PUBLIC_BASE_URL}/{object_key}"
+                else:
+                    return f"https://{settings.OSS_BUCKET_AUDIO}.{settings.OSS_ENDPOINT.replace('https://', '')}/{object_key}"
+        else:
+            # Return local URL
+            # Assuming the app is running on localhost:8000 and static is mounted at /static/uploads
+            return f"http://localhost:8000/static/uploads/{object_key}"
+
+# Singleton instance
+oss_service = OssService()

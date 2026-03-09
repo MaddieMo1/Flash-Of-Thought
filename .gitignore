@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.venv/
+
+# Environment Variables
+.env
+
+# Data
+data/chroma_db/
+static/uploads/
+# Keep mock_notes.json as it might be useful for demo, or ignore it if strictly user data.
+# Let's keep mock_notes.json for now as it was recently added as a fallback.
+
+# IDE
+.vscode/
+.idea/

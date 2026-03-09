@@ -1,0 +1,22 @@
+fastapi>=0.109.0
+uvicorn>=0.27.0
+streamlit>=1.40.0
+streamlit-autorefresh>=1.0.1
+streamlit-agraph>=0.0.45
+chromadb>=0.4.22
+dashscope>=1.14.0
+# oss2>=2.18.4
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+requests>=2.31.0
+mcp>=0.1.0
+openai>=1.10.0
+tenacity>=8.2.3
+python-multipart>=0.0.7
+streamlit-echarts==0.4.0
+plotly
+networkx
+pandas
+numpy
+streamlit-mic-recorder
