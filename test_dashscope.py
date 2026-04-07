@@ -20,7 +20,7 @@ bucket = oss2.Bucket(auth, endpoint, bucket_name)
 test_key = "dashscope_test.mp3"
 # Create a dummy mp3 file (just text content, might fail ASR but should start task)
 # Or copy existing file
-with open(r"d:\软件\Trae IDE\IdeaPills\audio\录音.mp3", "rb") as f:
+with open(r"d:\软件\Trae IDE\FlashOfThought\audio\录音.mp3", "rb") as f:
     bucket.put_object(test_key, f)
 
 import requests

@@ -4,7 +4,7 @@ import json
 import time
 
 API_URL = "http://127.0.0.1:8000/api/v1"
-AUDIO_FILE = r"d:\软件\Trae IDE\IdeaPills\audio\录音.mp3"
+AUDIO_FILE = r"d:\软件\Trae IDE\FlashOfThought\audio\录音.mp3"
 
 def test_upload():
     print(f"Testing Upload with {AUDIO_FILE}...")

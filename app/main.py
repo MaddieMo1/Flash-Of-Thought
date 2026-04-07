@@ -8,8 +8,8 @@ from app.api.routes import router as api_router
 load_dotenv()
 
 app = FastAPI(
-    title="IdeaPills API",
-    description="Backend for IdeaPills - Voice Note Assistant",
+    title="FlashOfThought API",
+    description="Backend for FlashOfThought - Voice Note Assistant",
     version="0.1.0"
 )
 
@@ -23,7 +23,7 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to IdeaPills API",
+        "message": "Welcome to FlashOfThought API",
         "status": "running",
         "docs_url": "/docs"
     }

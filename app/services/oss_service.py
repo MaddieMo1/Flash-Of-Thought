@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+from urllib.parse import urlparse
 from app.core.config import get_settings
 
 try:
@@ -14,12 +15,14 @@ settings = get_settings()
 
 class OssService:
     def __init__(self):
+        self.oss_endpoint = None
         # Prefer OSS if configured and available, otherwise fallback to local
         if OSS_AVAILABLE and settings.STORAGE_PROVIDER == 'oss':
             self.mode = 'oss'
             try:
+                self.oss_endpoint = self._normalize_oss_endpoint(settings.OSS_ENDPOINT, settings.OSS_BUCKET_AUDIO)
                 self.auth = oss2.Auth(settings.OSS_ACCESS_KEY_ID, settings.OSS_ACCESS_KEY_SECRET)
-                self.bucket = oss2.Bucket(self.auth, settings.OSS_ENDPOINT, settings.OSS_BUCKET_AUDIO)
+                self.bucket = oss2.Bucket(self.auth, self.oss_endpoint, settings.OSS_BUCKET_AUDIO)
             except Exception as e:
                 print(f"Failed to initialize OSS: {e}. Fallback to local storage.")
                 self.mode = 'local'
@@ -29,6 +32,15 @@ class OssService:
             self.mode = 'local'
             self.local_storage_path = "static/uploads"
             os.makedirs(self.local_storage_path, exist_ok=True)
+
+    def _normalize_oss_endpoint(self, endpoint: str, bucket_name: str) -> str:
+        parsed = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}")
+        hostname = parsed.netloc or parsed.path
+        bucket_prefix = f"{bucket_name}."
+        if hostname.startswith(bucket_prefix):
+            hostname = hostname[len(bucket_prefix):]
+        scheme = parsed.scheme or "https"
+        return f"{scheme}://{hostname}"
         
     def upload_file(self, file_content: bytes, file_extension: str = "mp3") -> str:
         """
@@ -58,15 +70,17 @@ class OssService:
             if settings.OSS_USE_SIGNED_URL:
                 return self.bucket.sign_url('GET', object_key, settings.OSS_SIGNED_URL_EXPIRE_SEC)
             else:
-                # Assuming public read permission or CNAME setup
-                if settings.OSS_PUBLIC_BASE_URL:
-                    return f"{settings.OSS_PUBLIC_BASE_URL}/{object_key}"
-                else:
-                    return f"https://{settings.OSS_BUCKET_AUDIO}.{settings.OSS_ENDPOINT.replace('https://', '')}/{object_key}"
+                return self.get_public_file_url(object_key)
         else:
             # Return local URL
             # Assuming the app is running on localhost:8000 and static is mounted at /static/uploads
             return f"http://localhost:8000/static/uploads/{object_key}"
+
+    def get_public_file_url(self, object_key: str) -> str:
+        if settings.OSS_PUBLIC_BASE_URL:
+            return f"{settings.OSS_PUBLIC_BASE_URL}/{object_key}"
+        endpoint_host = (self.oss_endpoint or settings.OSS_ENDPOINT).replace("https://", "").replace("http://", "")
+        return f"https://{settings.OSS_BUCKET_AUDIO}.{endpoint_host}/{object_key}"
 
 # Singleton instance
 oss_service = OssService()

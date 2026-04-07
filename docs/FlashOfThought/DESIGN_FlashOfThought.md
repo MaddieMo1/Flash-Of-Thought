@@ -1,4 +1,4 @@
-# DESIGN_IdeaPills: 系统架构与设计文档
+# DESIGN_FlashOfThought: 系统架构与设计文档
 
 ## 1. 系统架构图 (System Architecture)
 
@@ -7,7 +7,7 @@ graph TD
     User[用户] --> WebUI[Streamlit Web UI]
     Agent[AI Agent / IDE] --> MCP[MCP Server (Stdio/SSE)]
     
-    subgraph "IdeaPills Backend (FastAPI)"
+    subgraph "FlashOfThought Backend (FastAPI)"
         WebUI --> API[REST API]
         MCP --> API
         
@@ -61,7 +61,7 @@ graph TD
 ## 3. 目录结构 (Directory Structure)
 
 ```
-IdeaPills/
+FlashOfThought/
 ├── .env                    # 环境变量
 ├── requirements.txt        # 依赖包
 ├── main.py                 # FastAPI 入口 & MCP Server 入口

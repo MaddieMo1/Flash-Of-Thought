@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from streamlit_mic_recorder import mic_recorder, speech_to_text
 from streamlit_echarts import st_echarts
-from ui.utils import save_analysis_result
+from utils import save_analysis_result
 # from streamlit_agraph import agraph, Node, Edge, Config # Replaced with PyDeck for 3D
 
 try:
@@ -19,10 +19,16 @@ except Exception:
 
 # Backend API URL
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
+API_SESSION = requests.Session()
+API_SESSION.trust_env = False
+
+def api_request(method, path, **kwargs):
+    kwargs.setdefault("timeout", 60)
+    return API_SESSION.request(method, f"{API_BASE_URL}{path}", **kwargs)
 
 st.set_page_config(
-    page_title="IdeaPills 💊",
-    page_icon="💊",
+    page_title="FlashOfThought",
+    page_icon="/Users/maddie/Trea/Project/Flash-Of-Thought-main/Flash-Of-Thought-main/Icon/1460.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -30,113 +36,185 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
-    /* Global Styles */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
     .main .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
+        padding-top: 3rem;
+        padding-bottom: 3rem;
+        max-width: 1000px;
     }
-    
-    /* Typography */
+
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+
     h1 {
-        color: #00D4FF !important; /* Tech Cyan */
-        font-family: 'Inter', 'Segoe UI', sans-serif;
+        background: linear-gradient(90deg, #00D4FF 0%, #7B61FF 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        margin-bottom: 1.5rem;
+    }
+
+    h2 {
+        color: #FFFFFF !important;
         font-weight: 700;
-        letter-spacing: -0.5px;
+        letter-spacing: -0.02em;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
     }
-    h2, h3 {
-        color: #E0E0E0 !important;
-        font-family: 'Inter', 'Segoe UI', sans-serif;
+
+    h3 {
+        color: #E2E8F0 !important;
         font-weight: 600;
     }
-    
-    /* Buttons */
+
+    .stMarkdown p {
+        color: #A0AEC0;
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
     .stButton>button {
-        border-radius: 8px; /* Slightly rounded, not pill */
+        border-radius: 12px;
         font-weight: 600;
-        border: 1px solid #333;
-        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background-color: rgba(255, 255, 255, 0.05);
+        color: #E2E8F0;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: 0.5rem 1rem;
     }
     .stButton>button:hover {
-        border-color: #00D4FF;
+        border-color: rgba(0, 212, 255, 0.4);
+        background-color: rgba(0, 212, 255, 0.1);
         color: #00D4FF;
-        box-shadow: 0 0 10px rgba(0, 212, 255, 0.2);
+        transform: translateY(-1px);
     }
-    
-    /* Containers & Cards */
+
+    div[data-testid="stButton"] button[kind="primary"] {
+        background: linear-gradient(135deg, #00D4FF 0%, #0096FF 100%) !important;
+        color: #FFFFFF !important;
+        border: none;
+        box-shadow: 0 4px 14px rgba(0, 212, 255, 0.3);
+    }
+    div[data-testid="stButton"] button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #2EE0FF 0%, #00A6FF 100%) !important;
+        box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+        transform: translateY(-2px);
+    }
+
     .stExpander {
-        border: 1px solid #333;
-        border-radius: 8px;
-        background-color: #1E212B; /* Darker card bg */
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        background: linear-gradient(145deg, rgba(30, 33, 43, 0.9) 0%, rgba(20, 22, 28, 0.9) 100%);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: border-color 0.2s ease;
     }
-    
-    /* Inputs */
+    .stExpander:hover {
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+
     .stTextInput>div>div>input, .stTextArea>div>div>textarea {
-        border-radius: 8px;
-        background-color: #0E1117;
-        border: 1px solid #333;
-        color: #FAFAFA;
+        border-radius: 12px;
+        background-color: rgba(14, 17, 23, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #FFFFFF;
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+        transition: all 0.2s ease;
     }
     .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus {
         border-color: #00D4FF;
-        box-shadow: 0 0 5px rgba(0, 212, 255, 0.3);
+        box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+        background-color: rgba(14, 17, 23, 0.9);
     }
-    
-    /* Custom Scrollbar */
+
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        color: #A0AEC0;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #00D4FF !important;
+        font-weight: 600;
+    }
+
+    div[data-testid="stAlertContainer"] {
+        border-radius: 14px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(30, 33, 43, 0.8);
+        backdrop-filter: blur(10px);
+    }
+    div[data-testid="stAlertContainer"] [data-testid="stAlertContentError"] {
+        color: #FFD1D1;
+    }
+
     ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
     }
     ::-webkit-scrollbar-track {
-        background: #0E1117; 
+        background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-        background: #333; 
-        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
     }
     ::-webkit-scrollbar-thumb:hover {
-        background: #555; 
+        background: rgba(255, 255, 255, 0.3);
     }
-    
-    /* Tags (Code blocks) */
+
     code {
-        color: #00D4FF !important;
-        background-color: rgba(0, 212, 255, 0.1) !important;
-        border-radius: 4px;
-        font-family: 'Consolas', 'Monaco', monospace;
-        border: 1px solid rgba(0, 212, 255, 0.2);
+        color: #E2E8F0 !important;
+        background-color: rgba(255, 255, 255, 0.08) !important;
+        border-radius: 6px;
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 0.2em 0.4em;
     }
-    
-    /* Toast */
+
     .stToast {
-        background-color: #1E212B !important;
-        border: 1px solid #333;
-        color: #FAFAFA !important;
+        background: rgba(30, 33, 43, 0.95) !important;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        color: #FFFFFF !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
-    
-    /* Primary Button Override */
-    div[data-testid="stButton"] button[kind="primary"] {
-        background-color: #00D4FF !important;
-        color: #0E1117 !important; /* Dark text for contrast */
-        border: none;
-    }
-    div[data-testid="stButton"] button[kind="primary"]:hover {
-        background-color: #00B8E6 !important;
-        color: #0E1117 !important;
-        box-shadow: 0 0 15px rgba(0, 212, 255, 0.4);
-    }
-    
-    /* Divider */
+
     hr {
-        border-color: #333 !important;
+        border-color: rgba(255, 255, 255, 0.08) !important;
+        margin: 2rem 0;
     }
+
+    [data-testid="stSidebar"] {
+        background-color: #0B0E14;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+        color: #E2E8F0;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: #00D4FF;
+        font-weight: 700;
+    }
+
+    footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("IdeaPills 💊 : 语音想法助手")
+st.title("FlashOfThought : 语音想法助手")
 
 # Sidebar for navigation
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/000000/pill.png", width=50)
+    st.image("/Users/maddie/Trea/Project/Flash-Of-Thought-main/Flash-Of-Thought-main/Icon/1460.png", width=50)
     st.markdown("### 功能导航")
     
     # Page Option Mapping
@@ -154,7 +232,7 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v0.1.0 | 由 Trae 驱动")
+    st.caption("v0.1.0 | Maddie编写 并技术支持")
 
 def process_audio(audio_data, file_name, file_type="audio/mp3"):
     """
@@ -164,7 +242,7 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
         try:
             # 1. Upload
             files = {"file": (file_name, audio_data, file_type)}
-            upload_res = requests.post(f"{API_BASE_URL}/upload", files=files)
+            upload_res = api_request("POST", "/upload", files=files)
             
             if upload_res.status_code == 200:
                 upload_data = upload_res.json()
@@ -175,8 +253,9 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                 
                 # 2. Structure
                 with st.spinner("🧠 正在整理笔记结构..."):
-                    process_res = requests.post(
-                        f"{API_BASE_URL}/process", 
+                    process_res = api_request(
+                        "POST",
+                        "/process",
                         json={"raw_text": raw_text}
                     )
                     
@@ -184,6 +263,7 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                         st.session_state.current_note = process_res.json()
                         st.session_state.current_raw_text = raw_text
                         st.session_state.current_file_url = file_url
+                        st.rerun()
                     else:
                         st.error(f"整理失败: {process_res.text}")
             else:
@@ -201,8 +281,9 @@ def process_text_input(text):
 
     with st.spinner("🧠 正在整理笔记结构..."):
         try:
-            process_res = requests.post(
-                f"{API_BASE_URL}/process", 
+            process_res = api_request(
+                "POST",
+                "/process",
                 json={"raw_text": text}
             )
             
@@ -210,6 +291,8 @@ def process_text_input(text):
                 st.session_state.current_note = process_res.json()
                 st.session_state.current_raw_text = text
                 st.session_state.current_file_url = ""
+                st.toast("✅ 整理成功！", icon="✨")
+                st.rerun()
             else:
                 st.error(f"整理失败: {process_res.text}")
         except Exception as e:
@@ -220,7 +303,7 @@ def get_related_notes(query, current_id=None):
     Fetch related notes using semantic search
     """
     try:
-        search_res = requests.post(f"{API_BASE_URL}/search", json={"query": query, "limit": 4})
+        search_res = api_request("POST", "/search", json={"query": query, "limit": 4})
         if search_res.status_code == 200:
             results = search_res.json()
             # Filter out the current note itself if current_id is provided
@@ -302,7 +385,7 @@ def display_note():
                         "raw_text": raw_text,
                         "source_url": file_url
                     }
-                    save_res = requests.post(f"{API_BASE_URL}/save", json=save_payload)
+                    save_res = api_request("POST", "/save", json=save_payload)
                     if save_res.status_code == 200:
                         st.balloons()
                         st.toast("保存成功!", icon="💾")
@@ -378,9 +461,8 @@ if page_selection == "record_idea":
             if st.button("开始整理 (文字)", type="primary"):
                 # Clear previous state
                 if "text_input_val" in st.session_state:
-                     st.session_state.text_input_val = text_input
+                     st.session_state.text_input_val = ""
                 process_text_input(text_input)
-                st.rerun()
 
         with tab4:
             st.markdown("### 🎙️ 闪念指令模式")
@@ -403,7 +485,7 @@ if page_selection == "record_idea":
                     files = {"file": ("command.wav", audio['bytes'], "audio/wav")}
                     
                     # Call upload API (which does ASR)
-                    upload_res = requests.post(f"{API_BASE_URL}/upload", files=files)
+                    upload_res = api_request("POST", "/upload", files=files)
                     
                     if upload_res.status_code == 200:
                         upload_data = upload_res.json()
@@ -423,7 +505,6 @@ if page_selection == "record_idea":
                             if content:
                                 st.toast(f"正在处理: {content[:10]}...", icon="🧠")
                                 process_text_input(content)
-                                st.rerun()
                             else:
                                 st.warning("指令内容为空")
                         else:
@@ -431,7 +512,6 @@ if page_selection == "record_idea":
                              st.warning("未检测到'闪念'，但已为您记录。")
                              if len(text) > 1:
                                  process_text_input(text)
-                                 st.rerun()
                     else:
                         st.error(f"语音识别失败: {upload_res.text}")
                 except Exception as e:
@@ -456,7 +536,7 @@ elif page_selection == "knowledge_review":
             if st.button("✨ 生成周报", type="primary", use_container_width=True):
                 with st.spinner("AI正在分析你的灵感..."):
                     try:
-                        res = requests.post(f"{API_BASE_URL}/analyze/weekly_summary", json={"days": days_option})
+                        res = api_request("POST", "/analyze/weekly_summary", json={"days": days_option})
                         if res.status_code == 200:
                             st.session_state.weekly_summary = res.json()
                         else:
@@ -509,7 +589,7 @@ elif page_selection == "knowledge_review":
             if query:
                 with st.spinner("正在搜索..."):
                     try:
-                        search_res = requests.post(f"{API_BASE_URL}/search", json={"query": query, "limit": 5})
+                        search_res = api_request("POST", "/search", json={"query": query, "limit": 5})
                         
                         if search_res.status_code == 200:
                             results = search_res.json()
@@ -558,7 +638,7 @@ elif page_selection == "knowledge_review":
             with st.chat_message("assistant"):
                 with st.spinner("思考中..."):
                     try:
-                        res = requests.post(f"{API_BASE_URL}/chat", json={"query": prompt})
+                        res = api_request("POST", "/chat", json={"query": prompt})
                         if res.status_code == 200:
                             data = res.json()
                             answer = data.get("answer", "我不知道怎么回答。")
@@ -597,7 +677,7 @@ elif page_selection == "knowledge_review":
 
     with st.spinner("正在加载笔记列表..."):
         try:
-            list_res = requests.get(f"{API_BASE_URL}/notes", params={"limit": 20})
+            list_res = api_request("GET", "/notes", params={"limit": 20})
             if list_res.status_code == 200:
                 notes = list_res.json()
                 if not notes:
@@ -616,7 +696,7 @@ elif page_selection == "knowledge_review":
                             with col_btns[0]:
                                 if st.button("🗑️ 删除", key=f"del_{note.get('id')}"):
                                     try:
-                                        del_res = requests.delete(f"{API_BASE_URL}/notes/{note.get('id')}")
+                                        del_res = api_request("DELETE", f"/notes/{note.get('id')}")
                                         if del_res.status_code == 200:
                                             st.toast("删除成功!")
                                             time.sleep(1)
@@ -649,7 +729,7 @@ elif page_selection == "knowledge_review":
                                             "tags": [t.strip() for t in new_tags.split(',')]
                                         }
                                         try:
-                                            upd_res = requests.put(f"{API_BASE_URL}/notes/{note.get('id')}", json=updated_note)
+                                            upd_res = api_request("PUT", f"/notes/{note.get('id')}", json=updated_note)
                                             if upd_res.status_code == 200:
                                                 st.toast("修改成功!")
                                                 st.session_state[f"edit_mode_{note.get('id')}"] = False
@@ -737,8 +817,9 @@ elif page_selection == "knowledge_review":
                                         with analysis_slot.container():
                                             with st.spinner("AI正在扩展想法..."):
                                                 try:
-                                                    res = requests.post(
-                                                        f"{API_BASE_URL}/analyze/expand",
+                                                    res = api_request(
+                                                        "POST",
+                                                        "/analyze/expand",
                                                         json={"raw_text": note.get("document", "")},
                                                     )
                                                     if res.status_code == 200:
@@ -753,8 +834,9 @@ elif page_selection == "knowledge_review":
                                         with analysis_slot.container():
                                             with st.spinner("AI正在规划路线..."):
                                                 try:
-                                                    res = requests.post(
-                                                        f"{API_BASE_URL}/analyze/roadmap",
+                                                    res = api_request(
+                                                        "POST",
+                                                        "/analyze/roadmap",
                                                         json={"raw_text": note.get("document", "")},
                                                     )
                                                     if res.status_code == 200:
@@ -769,8 +851,9 @@ elif page_selection == "knowledge_review":
                                         with analysis_slot.container():
                                             with st.spinner("AI正在评分..."):
                                                 try:
-                                                    res = requests.post(
-                                                        f"{API_BASE_URL}/analyze/score",
+                                                    res = api_request(
+                                                        "POST",
+                                                        "/analyze/score",
                                                         json={"raw_text": note.get("document", "")},
                                                     )
                                                     if res.status_code == 200:
@@ -878,7 +961,7 @@ elif page_selection == "knowledge_graph":
 
     with st.spinner("正在构建知识图谱..."):
         try:
-            res = requests.get(f"{API_BASE_URL}/graph")
+            res = api_request("GET", "/graph")
             if res.status_code != 200:
                 st.error(f"获取图谱失败: {res.text}")
                 raise RuntimeError("graph api failed")

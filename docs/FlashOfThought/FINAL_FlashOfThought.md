@@ -1,15 +1,15 @@
-# FINAL_IdeaPills: 项目交付报告
+# FINAL_FlashOfThought: 项目交付报告
 
 ## 1. 项目概述
-IdeaPills 已完成核心功能开发，实现了一个基于语音输入的智能知识管理系统。系统能够自动处理语音转写、结构化整理、向量化存储及语义检索。
+FlashOfThought 已完成核心功能开发，实现了一个基于语音输入的智能知识管理系统。系统能够自动处理语音转写、结构化整理、向量化存储及语义检索。
 
 ## 2. 交付物清单
 *   **源代码**: 包含完整的前后端代码及 MCP Server 实现。
 *   **文档**:
-    *   `ALIGNMENT_IdeaPills.md`: 需求对齐文档
-    *   `CONSENSUS_IdeaPills.md`: 共识文档
-    *   `DESIGN_IdeaPills.md`: 架构设计文档
-    *   `TASK_IdeaPills.md`: 任务拆解文档
+    *   `ALIGNMENT_FlashOfThought.md`: 需求对齐文档
+    *   `CONSENSUS_FlashOfThought.md`: 共识文档
+    *   `DESIGN_FlashOfThought.md`: 架构设计文档
+    *   `TASK_FlashOfThought.md`: 任务拆解文档
     *   `README.md`: 使用说明文档
 *   **可执行程序**:
     *   FastAPI 后端服务

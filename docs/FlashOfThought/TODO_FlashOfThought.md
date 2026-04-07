@@ -1,6 +1,6 @@
-# TODO_IdeaPills: 待办与支持事项
+# TODO_FlashOfThought: 待办与支持事项
 
-为了确保您能顺利运行 IdeaPills，请关注以下事项：
+为了确保您能顺利运行 FlashOfThought，请关注以下事项：
 
 ## 1. 环境配置 (Immediate Actions)
 - [ ] **安装依赖**: 请在终端运行 `pip install -r requirements.txt`。

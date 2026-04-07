@@ -5,7 +5,7 @@ from app.models.note import NoteStructure
 import json
 
 # Initialize FastMCP server
-mcp = FastMCP("IdeaPills")
+mcp = FastMCP("FlashOfThought")
 
 @mcp.tool()
 async def add_idea(text: str) -> str:

@@ -1,4 +1,4 @@
-# TASK_IdeaPills: 开发任务清单
+# TASK_FlashOfThought: 开发任务清单
 
 ## 1. 基础环境搭建 (Setup)
 - [ ] **Task-001**: 初始化项目结构

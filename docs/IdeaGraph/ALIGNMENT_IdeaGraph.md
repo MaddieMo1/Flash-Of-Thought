@@ -1,7 +1,7 @@
 # ALIGNMENT: 知识图谱 (Idea Graph)
 
 ## 1. 项目上下文分析
-- **项目名称**: IdeaPills (语音想法助手)
+- **项目名称**: FlashOfThought (语音想法助手)
 - **核心功能**: 语音/文本录入想法，AI 自动整理结构化笔记，语义搜索回顾。
 - **技术栈**:
     - **Frontend**: Streamlit

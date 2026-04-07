@@ -1,7 +1,7 @@
-# ALIGNMENT_IdeaPills: 语音笔记智能助手需求对齐文档
+# ALIGNMENT_FlashOfThought: 语音笔记智能助手需求对齐文档
 
 ## 1. 项目背景与目标
-用户希望构建一个"即时语音记录想法"的应用，核心是将语音转化为结构化的知识，并能够被其他系统（如MCP客户端、第三方软件）调用。项目名称暂定为 **IdeaPills**。
+用户希望构建一个"即时语音记录想法"的应用，核心是将语音转化为结构化的知识，并能够被其他系统（如MCP客户端、第三方软件）调用。项目名称暂定为 **FlashOfThought**。
 
 ## 2. 核心需求分析 (Core Requirements)
 
@@ -57,5 +57,5 @@
 ## 6. 下一步计划 (Next Steps)
 
 1.  用户确认上述架构。
-2.  创建 `DESIGN_IdeaPills.md` 细化接口定义。
+2.  创建 `DESIGN_FlashOfThought.md` 细化接口定义。
 3.  初始化 FastAPI 项目与 MCP Server 框架。

@@ -1,4 +1,4 @@
-# ACCEPTANCE_IdeaPills: 验收记录
+# ACCEPTANCE_FlashOfThought: 验收记录
 
 ## 任务执行状态
 

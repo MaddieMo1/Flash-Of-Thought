@@ -1,21 +1,27 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Virtual Environment
-venv/
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 .venv/
-
-# Environment Variables
 .env
-
-# Data
-data/chroma_db/
-static/uploads/
-# Keep mock_notes.json as it might be useful for demo, or ignore it if strictly user data.
-# Let's keep mock_notes.json for now as it was recently added as a fallback.
-
-# IDE
-.vscode/
-.idea/
+__pycache__/

@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "IdeaPills"
+    APP_NAME: str = "FlashOfThought"
     
     # OSS
     STORAGE_PROVIDER: str = "oss"

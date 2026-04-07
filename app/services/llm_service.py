@@ -51,15 +51,30 @@ class LLMService:
                  print(f"DEBUG: Converted local path to URL: {file_url}")
 
         try:
-            task_response = Transcription.async_call(
-                model=settings.QWEN_ASR_MODEL,
-                file_urls=[file_url],
-                language_hints=['zh', 'en']
-            )
-            
-            print(f"DEBUG: ASR Task Response: {task_response}")
-            if task_response.status_code != HTTPStatus.OK:
-                 raise Exception(f"ASR Task Start Failed: {task_response.code} - {task_response.message}")
+            candidate_models = [settings.QWEN_ASR_MODEL]
+            if settings.QWEN_ASR_MODEL != "paraformer-v2":
+                candidate_models.append("paraformer-v2")
+
+            task_response = None
+            start_error = None
+            for model_name in candidate_models:
+                task_response = Transcription.async_call(
+                    model=model_name,
+                    file_urls=[file_url],
+                    language_hints=['zh', 'en']
+                )
+                print(f"DEBUG: ASR Task Response ({model_name}): {task_response}")
+                if task_response.status_code == HTTPStatus.OK:
+                    break
+                code = str(getattr(task_response, "code", ""))
+                message = str(getattr(task_response, "message", ""))
+                if code == "InvalidParameter" and "url error" in message.lower():
+                    start_error = f"ASR Task Start Failed: {code} - {message}"
+                    continue
+                raise Exception(f"ASR Task Start Failed: {code} - {message}")
+
+            if task_response is None or task_response.status_code != HTTPStatus.OK:
+                raise Exception(start_error or "ASR Task Start Failed")
             
             transcription_response = Transcription.wait(task=task_response.output.task_id)
             
@@ -144,9 +159,16 @@ class LLMService:
             content = response.output.choices[0].message.content
             # Clean up potential markdown code blocks
             content = content.replace("```json", "").replace("```", "").strip()
+            # Find the first { and last } to extract JSON
+            start_idx = content.find("{")
+            end_idx = content.rfind("}")
+            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                content = content[start_idx:end_idx+1]
+            
             try:
                 return json.loads(content)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"JSON Decode Error: {e}, Raw content: {content}")
                 # Fallback if JSON is invalid
                 return {
                     "title": "未命名笔记",
@@ -354,9 +376,17 @@ class LLMService:
         if response.status_code == HTTPStatus.OK:
             content = response.output.choices[0].message.content
             content = content.replace("```json", "").replace("```", "").strip()
+            
+            # Extract JSON block
+            start_idx = content.find("{")
+            end_idx = content.rfind("}")
+            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                content = content[start_idx:end_idx+1]
+                
             try:
                 return json.loads(content)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"JSON Decode Error in _parse_json_response: {e}, Raw content: {content}")
                 return {"error": "Failed to parse JSON", "raw": content}
         else:
              raise Exception(f"LLM Chat Failed: {response.code} - {response.message}")
