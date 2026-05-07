@@ -1,10 +1,11 @@
 import requests
 import os
+os.environ["NO_PROXY"] = "*"
 import json
 import time
 
 API_URL = "http://127.0.0.1:8000/api/v1"
-AUDIO_FILE = r"d:\软件\Trae IDE\FlashOfThought\audio\录音.mp3"
+AUDIO_FILE = "/Users/maddie/Trea/Project/Flash-Of-Thought-main/Flash-Of-Thought-main/audio/录音.mp3"
 
 def test_upload():
     print(f"Testing Upload with {AUDIO_FILE}...")

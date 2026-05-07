@@ -1086,6 +1086,11 @@ elif page_selection == "knowledge_graph":
                             "links": echart_edges,
                             "categories": categories,
                             "roam": True,
+                            "zoom": 0.576,
+                            "scaleLimit": {
+                                "min": 0.4,
+                                "max": 4
+                            },
                             "label": {
                                 "show": show_labels,
                                 "position": "right",
