@@ -223,7 +223,6 @@ with st.sidebar:
         "knowledge_review": "🔍 知识回顾",
         "knowledge_graph": "🕸️ 知识图谱"
     }
-    
     page_selection = st.radio(
         "选择模式", 
         options=list(page_options.keys()), 
@@ -939,8 +938,15 @@ elif page_selection == "knowledge_review":
                                             section_content = document_text[start_idx:content_end].strip()
                                             
                                             if section_content and key == "Raw":
-                                                with st.expander("查看原始文本"):
-                                                    st.text(section_content)
+                                                st.markdown(f"**{label}**")
+                                                st.text_area(
+                                                    "原始记录",
+                                                    value=section_content,
+                                                    height=120,
+                                                    disabled=True,
+                                                    label_visibility="collapsed",
+                                                    key=f"raw_text_{note.get('id')}",
+                                                )
                                             elif section_content:
                                                 st.markdown(f"**{label}**")
                                                 if "," in section_content:
@@ -953,7 +959,7 @@ elif page_selection == "knowledge_review":
             else:
                  st.error(f"加载失败: {list_res.text}")
         except Exception as e:
-            st.error(f"连接失败: {str(e)}")
+            st.error(f"加载笔记失败: {str(e)}")
 
 elif page_selection == "knowledge_graph":
     st.header("🌌 知识图谱")

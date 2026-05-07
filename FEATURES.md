@@ -48,5 +48,4 @@
 *   **语音转写 (ASR) 容灾策略**：上传链路中应用了模型回退机制，默认优先调用更快的 `qwen3-asr-flash`，若遇 OSS 签名 URL 导致 `InvalidParameter` 错误，系统会自动无缝回退至 `paraformer-v2` 模型以保障转写成功率。
 
 ### 前端架构 (Frontend)
-*   **当前生产 UI (Python)**：基于 `Streamlit` 构建，使用自定义 CSS 实现了暗黑科技风，集成了 `streamlit-mic-recorder` (语音录制) 与 `streamlit-echarts` (图谱渲染)。
-*   **重构/下一代 UI (Node.js)**：项目目录中正在并行初始化基于 `React` + `Vite` + `TypeScript` + `Tailwind CSS` (及 `shadcn/ui`) 的现代化前端应用，以备后续体验升级。
+*   **生产 UI (Python)**：基于 `Streamlit` 构建，使用自定义 CSS 实现了暗黑科技风，集成了 `streamlit-mic-recorder` (语音录制) 与 `streamlit-echarts` (图谱渲染)。

@@ -46,7 +46,7 @@
 1.  **用户界面 (UI)**:
     *   A: 仅提供后端 API 和 MCP Server (Headless)
     *   B: 提供一个简单的 Web 界面 (Streamlit/Gradio) 用于测试和演示 **(推荐)**
-    *   C: 需要完整的 React/Vue 前端 (开发周期较长)
+    *   C: 需要完整的自定义前端 (开发周期较长)
 2.  **向量数据库选型**:
     *   A: ChromaDB (本地文件存储，无需Docker，Python原生支持，最简单) **(推荐)**
     *   B: Qdrant/Milvus (需要Docker容器，性能更强)

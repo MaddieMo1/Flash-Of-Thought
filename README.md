@@ -28,15 +28,13 @@
 - **大语言模型 (LLM)**: 阿里云 DashScope (Qwen系列模型, 语音转写, 向量模型)
 - **云存储 (OSS)**: 阿里云 OSS (用于音频文件存储)
 - **向量数据库**: `ChromaDB` (本地化 RAG 检索)
-- **前端 (Frontend)**: 
-  - **当前版本**: `Streamlit` (基于 Python 的快速数据应用框架)
-  - **下一代版本**: `React` + `Vite` + `TypeScript` + `Tailwind CSS` + `shadcn/ui`
+- **前端 (Frontend)**: `Streamlit` (基于 Python 的快速数据应用框架)
 
 ## 🚀 快速开始
 
 ### 1. 环境准备
 
-确保你已经安装了 `Python 3.10+` 和 `Node.js 18+`。
+确保你已经安装了 `Python 3.10+`。
 
 ### 2. 后端配置与运行
 
@@ -55,15 +53,9 @@
 
 ### 3. 前端运行
 
-**选项 A：运行 Streamlit 版本 (当前主版本)**
+运行 Streamlit 版本：
 ```bash
-streamlit run ui/app_pro.py
-```
-
-**选项 B：运行 React 版本 (重构中)**
-```bash
-npm install
-npm run dev
+streamlit run ui/app.py
 ```
 
 ## 📝 许可证
