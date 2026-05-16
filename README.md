@@ -58,6 +58,22 @@
 streamlit run ui/app.py
 ```
 
+## 登录接口
+
+后端已提供最小 JWT 登录系统，接口前缀为 `/api/v1/auth`：
+
+- `POST /register`：注册用户并返回 token。
+- `POST /login`：登录并返回 token。
+- `GET /me`：使用 `Authorization: Bearer <token>` 获取当前用户。
+
+可选环境变量：
+
+```env
+JWT_SECRET_KEY=请替换为随机长密钥
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=10080
+USERS_DB_PATH=./data/users.sqlite3
+```
+
 ## 📝 许可证
 
 MIT License

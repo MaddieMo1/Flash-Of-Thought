@@ -25,3 +25,4 @@ dist-ssr
 .venv/
 .env
 __pycache__/
+data/users.sqlite3

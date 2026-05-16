@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     
     # Vector DB
     CHROMA_DB_PATH: str = "./data/chroma_db"
+
+    # Auth
+    JWT_SECRET_KEY: str = "change-this-development-secret"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
+    USERS_DB_PATH: str = "./data/users.sqlite3"
     
     class Config:
         env_file = ".env"
