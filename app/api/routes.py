@@ -3,13 +3,15 @@ import re
 from app.services.oss_service import oss_service
 from app.services.llm_service import llm_service
 from app.services.rag_service import rag_service
+from app.services.auth_service import get_current_user
 from app.models.note import NoteStructure, NoteResponse
 from typing import List, Dict, Any
+from fastapi import Depends
 
 router = APIRouter()
 
 @router.post("/upload", summary="Upload audio and transcribe")
-async def upload_audio(file: UploadFile = File(...)):
+async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Upload audio file to OSS and transcribe it using ASR.
     """
@@ -34,24 +36,28 @@ async def upload_audio(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/notes/{note_id}", summary="Delete a note")
-async def delete_note(note_id: str):
+async def delete_note(note_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Delete a note by ID.
     """
     try:
-        success = rag_service.delete_note(note_id)
+        success = rag_service.delete_note(note_id, user_id=current_user["id"])
+        if not success:
+            raise HTTPException(status_code=404, detail="Note not found")
         return {"status": "deleted", "id": note_id}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/notes/{note_id}", summary="Update a note")
-async def update_note_route(note_id: str, note: NoteStructure):
+async def update_note_route(note_id: str, note: NoteStructure, current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Update a note structure.
     """
     try:
         note_dict = note.model_dump()
-        success = rag_service.update_note(note_id, note_dict)
+        success = rag_service.update_note(note_id, note_dict, user_id=current_user["id"])
         if not success:
             raise HTTPException(status_code=404, detail="Note not found")
         return {"status": "updated", "id": note_id}
@@ -61,7 +67,7 @@ async def update_note_route(note_id: str, note: NoteStructure):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/process", response_model=NoteStructure, summary="Structure raw text into a note")
-async def process_text(raw_text: str = Body(..., embed=True)):
+async def process_text(raw_text: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Process raw text using LLM to generate a structured note.
     """
@@ -75,42 +81,43 @@ async def process_text(raw_text: str = Body(..., embed=True)):
 async def save_note(
     note: NoteStructure,
     raw_text: str = Body(..., embed=True),
-    source_url: str = Body("", embed=True)
+    source_url: str = Body("", embed=True),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     Save the structured note and raw text to ChromaDB.
     """
     try:
         note_dict = note.model_dump()
-        note_id = rag_service.add_note(note_dict, raw_text, source_url)
+        note_id = rag_service.add_note(note_dict, raw_text, source_url, user_id=current_user["id"])
         return {"id": note_id, "status": "saved"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/search", summary="Search notes")
-async def search_notes(query: str = Body(..., embed=True), limit: int = 5):
+async def search_notes(query: str = Body(..., embed=True), limit: int = 5, current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Search for notes using semantic search.
     """
     try:
-        results = rag_service.query_notes(query, limit)
+        results = rag_service.query_notes(query, limit, user_id=current_user["id"])
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/notes", summary="List all notes")
-async def list_notes(limit: int = 20):
+async def list_notes(limit: int = 20, current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     List recent notes from the database.
     """
     try:
-        results = rag_service.get_all_notes(limit)
+        results = rag_service.get_all_notes(limit, user_id=current_user["id"])
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze/expand", summary="Expand an idea")
-async def expand_idea(raw_text: str = Body(..., embed=True)):
+async def expand_idea(raw_text: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
         result = llm_service.expand_idea(raw_text)
         return result
@@ -118,7 +125,7 @@ async def expand_idea(raw_text: str = Body(..., embed=True)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze/roadmap", summary="Generate roadmap")
-async def generate_roadmap(raw_text: str = Body(..., embed=True)):
+async def generate_roadmap(raw_text: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
         result = llm_service.generate_roadmap(raw_text)
         return result
@@ -126,7 +133,7 @@ async def generate_roadmap(raw_text: str = Body(..., embed=True)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze/score", summary="Score an idea")
-async def score_idea(raw_text: str = Body(..., embed=True)):
+async def score_idea(raw_text: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
         result = llm_service.score_idea(raw_text)
         return result
@@ -134,10 +141,10 @@ async def score_idea(raw_text: str = Body(..., embed=True)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/chat", summary="Chat with knowledge base")
-async def chat_with_kb(query: str = Body(..., embed=True)):
+async def chat_with_kb(query: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
         # 1. Search relevant notes
-        context_notes = rag_service.query_notes(query, limit=5)
+        context_notes = rag_service.query_notes(query, limit=5, user_id=current_user["id"])
         # 2. Generate answer
         answer = llm_service.chat_with_notes(query, context_notes)
         return {"answer": answer, "context": context_notes}
@@ -145,7 +152,7 @@ async def chat_with_kb(query: str = Body(..., embed=True)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/graph", summary="Get knowledge graph data")
-async def get_graph_data():
+async def get_graph_data(current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Get nodes and edges for knowledge graph visualization.
 
@@ -155,7 +162,7 @@ async def get_graph_data():
     - Level 3: Knowledge items (notes)
     """
     try:
-        notes = rag_service.get_all_notes(limit=0)
+        notes = rag_service.get_all_notes(limit=0, user_id=current_user["id"])
 
         nodes: List[Dict[str, Any]] = []
         edges: List[Dict[str, Any]] = []
@@ -270,7 +277,7 @@ async def get_graph_data():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze/weekly_summary", summary="Generate weekly summary")
-async def generate_weekly_summary(days: int = Body(7, embed=True)):
+async def generate_weekly_summary(days: int = Body(7, embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Generate a summary of notes from the last N days.
     """
@@ -280,7 +287,7 @@ async def generate_weekly_summary(days: int = Body(7, embed=True)):
         start_ts = end_ts - (days * 24 * 60 * 60)
         
         # 1. Get notes
-        notes = rag_service.get_notes_in_time_range(start_ts, end_ts)
+        notes = rag_service.get_notes_in_time_range(start_ts, end_ts, user_id=current_user["id"])
         
         # 2. Generate summary
         summary_data = llm_service.generate_weekly_summary(notes)

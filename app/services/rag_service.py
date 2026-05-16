@@ -70,7 +70,7 @@ class RagService:
         except Exception as e:
             print(f"Warning: failed to persist mock db: {e}")
 
-    def add_note(self, note_data: Dict[str, Any], raw_text: str, source_url: str = ""):
+    def add_note(self, note_data: Dict[str, Any], raw_text: str, source_url: str = "", user_id: Optional[str] = None):
         """
         Add a note to the vector database.
         note_data should come from LLM structure_note.
@@ -91,6 +91,8 @@ class RagService:
             "source_url": source_url,
             "created_at": str(int(time.time()))
         }
+        if user_id:
+            metadata["user_id"] = user_id
         
         # Serialize analysis results if present
         if note_data.get('expanded_idea'):
@@ -115,14 +117,19 @@ class RagService:
             
         return note_id
 
-    def query_notes(self, query_text: str, limit: int = 5) -> List[Dict[str, Any]]:
+    def query_notes(self, query_text: str, limit: int = 5, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Query notes by semantic similarity.
         """
         if CHROMADB_AVAILABLE:
+            query_kwargs = {
+                "query_texts": [query_text],
+                "n_results": limit
+            }
+            if user_id:
+                query_kwargs["where"] = {"user_id": user_id}
             results = self.collection.query(
-                query_texts=[query_text],
-                n_results=limit
+                **query_kwargs
             )
             
             # Format results
@@ -141,6 +148,8 @@ class RagService:
             # In a real mock we might check for substring match
             results = []
             for nid, data in self.mock_db.items():
+                if user_id and data.get('metadata', {}).get('user_id') != user_id:
+                    continue
                 if query_text.lower() in data['document'].lower() or query_text.lower() in data['metadata']['title'].lower():
                      results.append({
                         "id": nid,
@@ -150,15 +159,16 @@ class RagService:
                      })
             return results[:limit]
 
-    def get_all_notes(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_all_notes(self, limit: int = 20, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get all notes from the collection, sorted by created_at desc.
         """
         if CHROMADB_AVAILABLE:
             # Fetch all (or large number) to sort by date in memory
-            results = self.collection.get(
-                include=['metadatas', 'documents']
-            )
+            get_kwargs = {"include": ['metadatas', 'documents']}
+            if user_id:
+                get_kwargs["where"] = {"user_id": user_id}
+            results = self.collection.get(**get_kwargs)
             
             formatted_results = []
             if results['ids']:
@@ -188,6 +198,8 @@ class RagService:
             formatted_results = []
             for nid, data in self.mock_db.items():
                 metadata = data['metadata']
+                if user_id and metadata.get('user_id') != user_id:
+                    continue
                 # Safely get created_at, default to 0
                 created_at_val = metadata.get('created_at', 0)
                 try:
@@ -244,19 +256,25 @@ class RagService:
             
         return final_results
 
-    def delete_note(self, note_id: str):
+    def delete_note(self, note_id: str, user_id: Optional[str] = None):
         """
         Delete a note by ID.
         """
         if CHROMADB_AVAILABLE:
+            if user_id:
+                existing = self.collection.get(ids=[note_id], include=['metadatas'])
+                if not existing['ids'] or existing['metadatas'][0].get('user_id') != user_id:
+                    return False
             self.collection.delete(ids=[note_id])
         else:
+            if user_id and self.mock_db.get(note_id, {}).get('metadata', {}).get('user_id') != user_id:
+                return False
             if note_id in self.mock_db:
                 del self.mock_db[note_id]
                 self._persist_mock_db()
         return True
 
-    def update_note(self, note_id: str, note_data: Dict[str, Any], raw_text: str = None):
+    def update_note(self, note_id: str, note_data: Dict[str, Any], raw_text: str = None, user_id: Optional[str] = None):
         """
         Update a note. We delete and re-add it (or update in place).
         """
@@ -278,6 +296,9 @@ class RagService:
                 return False
             original_doc = self.mock_db[note_id]['document']
             original_meta = self.mock_db[note_id]['metadata']
+
+        if user_id and original_meta.get('user_id') != user_id:
+            return False
         
         # Helper to get from payload or fallback to original (deserialized)
         def get_analysis_data(key):
@@ -319,6 +340,8 @@ class RagService:
             "created_at": created_at,
             "updated_at": str(int(time.time()))
         }
+        if original_meta.get('user_id'):
+            metadata['user_id'] = original_meta['user_id']
         
         if exp: metadata['expanded_idea'] = exp
         if road: metadata['roadmap'] = road
@@ -339,14 +362,15 @@ class RagService:
             
         return True
 
-    def get_notes_in_time_range(self, start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
+    def get_notes_in_time_range(self, start_ts: int, end_ts: int, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get notes created within a specific time range.
         """
         if CHROMADB_AVAILABLE:
-            results = self.collection.get(
-                include=['metadatas', 'documents']
-            )
+            get_kwargs = {"include": ['metadatas', 'documents']}
+            if user_id:
+                get_kwargs["where"] = {"user_id": user_id}
+            results = self.collection.get(**get_kwargs)
             
             ids = results['ids']
             metadatas = results['metadatas']
@@ -360,6 +384,8 @@ class RagService:
         if ids:
             for i in range(len(ids)):
                 metadata = metadatas[i]
+                if user_id and metadata.get('user_id') != user_id:
+                    continue
                 # Fix: Handle non-int created_at
                 created_at_val = metadata.get('created_at', 0)
                 try:

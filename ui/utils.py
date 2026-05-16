@@ -1,7 +1,14 @@
 import requests
 import os
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
+def normalize_api_base_url(raw_url):
+    base_url = raw_url.rstrip("/")
+    if not base_url.endswith("/api/v1"):
+        base_url = f"{base_url}/api/v1"
+    return base_url
+
+
+API_BASE_URL = normalize_api_base_url(os.getenv("API_BASE_URL", "http://localhost:8000/api/v1"))
 API_SESSION = requests.Session()
 API_SESSION.trust_env = False
 
@@ -38,7 +45,7 @@ def parse_list_from_doc(document_text, key_name):
         
     return [item.strip() for item in content.split(',') if item.strip()]
 
-def save_analysis_result(note_id, current_note, analysis_type, result_data):
+def save_analysis_result(note_id, current_note, analysis_type, result_data, access_token=None):
     """
     Helper to update note with new analysis data
     """
@@ -80,6 +87,9 @@ def save_analysis_result(note_id, current_note, analysis_type, result_data):
         elif analysis_type == 'score':
             updated_note['score'] = result_data
             
-        API_SESSION.put(f"{API_BASE_URL}/notes/{note_id}", json=updated_note, timeout=60)
+        headers = {}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+        API_SESSION.put(f"{API_BASE_URL}/notes/{note_id}", json=updated_note, headers=headers, timeout=60)
     except Exception as e:
         print(f"Failed to auto-save analysis: {e}")

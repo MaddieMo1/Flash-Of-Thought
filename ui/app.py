@@ -18,12 +18,25 @@ except Exception:
     st_autorefresh = None
 
 # Backend API URL
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
+def normalize_api_base_url(raw_url):
+    base_url = raw_url.rstrip("/")
+    if not base_url.endswith("/api/v1"):
+        base_url = f"{base_url}/api/v1"
+    return base_url
+
+
+API_BASE_URL = normalize_api_base_url(os.getenv("API_BASE_URL", "http://localhost:8000/api/v1"))
 API_SESSION = requests.Session()
 API_SESSION.trust_env = False
 
 def api_request(method, path, **kwargs):
     kwargs.setdefault("timeout", 60)
+    headers = kwargs.pop("headers", {}) or {}
+    access_token = st.session_state.get("access_token")
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    if headers:
+        kwargs["headers"] = headers
     return API_SESSION.request(method, f"{API_BASE_URL}{path}", **kwargs)
 
 st.set_page_config(
@@ -210,11 +223,138 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def initialize_auth_state():
+    defaults = {
+        "access_token": None,
+        "current_user": None,
+        "auth_checked": False,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def auth_error_message(response):
+    try:
+        detail = response.json().get("detail", response.text)
+        if isinstance(detail, list):
+            return "；".join([item.get("msg", str(item)) for item in detail])
+        return str(detail)
+    except Exception:
+        return response.text
+
+
+def clear_auth_state():
+    for key in [
+        "access_token",
+        "current_user",
+        "auth_checked",
+        "current_note",
+        "current_raw_text",
+        "current_file_url",
+        "chat_history",
+        "weekly_summary",
+    ]:
+        st.session_state.pop(key, None)
+    initialize_auth_state()
+
+
+def verify_saved_session():
+    if st.session_state.auth_checked or not st.session_state.access_token:
+        return
+
+    try:
+        res = api_request("GET", "/auth/me", timeout=10)
+        if res.status_code == 200:
+            st.session_state.current_user = res.json()
+        else:
+            clear_auth_state()
+    except Exception:
+        clear_auth_state()
+    finally:
+        st.session_state.auth_checked = True
+
+
+def render_auth_page():
+    st.title("FlashOfThought : 语音想法助手")
+    st.caption("登录后，你的灵感、搜索、图谱和周报都会绑定到当前账号。")
+
+    login_tab, register_tab = st.tabs(["登录", "注册"])
+
+    with login_tab:
+        with st.form("login_form"):
+            email = st.text_input("邮箱", key="login_email")
+            password = st.text_input("密码", type="password", key="login_password")
+            submitted = st.form_submit_button("登录", type="primary", use_container_width=True)
+
+        if submitted:
+            try:
+                res = api_request(
+                    "POST",
+                    "/auth/login",
+                    json={"email": email, "password": password},
+                    timeout=20,
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    st.session_state.access_token = data["access_token"]
+                    st.session_state.current_user = data["user"]
+                    st.session_state.auth_checked = True
+                    st.toast("登录成功")
+                    st.rerun()
+                else:
+                    st.error(f"登录失败：{auth_error_message(res)}")
+            except Exception as e:
+                st.error(f"无法连接后端服务：{str(e)}")
+
+    with register_tab:
+        with st.form("register_form"):
+            email = st.text_input("邮箱", key="register_email")
+            password = st.text_input("密码（至少 8 位）", type="password", key="register_password")
+            confirm_password = st.text_input("确认密码", type="password", key="register_confirm_password")
+            submitted = st.form_submit_button("注册并登录", type="primary", use_container_width=True)
+
+        if submitted:
+            if password != confirm_password:
+                st.error("两次输入的密码不一致")
+            else:
+                try:
+                    res = api_request(
+                        "POST",
+                        "/auth/register",
+                        json={"email": email, "password": password},
+                        timeout=20,
+                    )
+                    if res.status_code == 200:
+                        data = res.json()
+                        st.session_state.access_token = data["access_token"]
+                        st.session_state.current_user = data["user"]
+                        st.session_state.auth_checked = True
+                        st.toast("注册成功")
+                        st.rerun()
+                    else:
+                        st.error(f"注册失败：{auth_error_message(res)}")
+                except Exception as e:
+                    st.error(f"无法连接后端服务：{str(e)}")
+
+
+initialize_auth_state()
+verify_saved_session()
+
+if not st.session_state.current_user:
+    render_auth_page()
+    st.stop()
+
 st.title("FlashOfThought : 语音想法助手")
 
 # Sidebar for navigation
 with st.sidebar:
     st.image("/Users/maddie/Trea/Project/Flash-Of-Thought-main/Flash-Of-Thought-main/Icon/1460.png", width=50)
+    st.caption(f"已登录：{st.session_state.current_user.get('email')}")
+    if st.button("退出登录", use_container_width=True):
+        clear_auth_state()
+        st.rerun()
+    st.markdown("---")
     st.markdown("### 功能导航")
     
     # Page Option Mapping
@@ -824,7 +964,7 @@ elif page_selection == "knowledge_review":
                                                     if res.status_code == 200:
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["expand"] = result_data
-                                                        save_analysis_result(note.get('id'), note, 'expand', result_data)
+                                                        save_analysis_result(note.get('id'), note, 'expand', result_data, st.session_state.get("access_token"))
                                                     else:
                                                         st.error("扩展失败")
                                                 except Exception as e:
@@ -841,7 +981,7 @@ elif page_selection == "knowledge_review":
                                                     if res.status_code == 200:
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["roadmap"] = result_data
-                                                        save_analysis_result(note.get('id'), note, 'roadmap', result_data)
+                                                        save_analysis_result(note.get('id'), note, 'roadmap', result_data, st.session_state.get("access_token"))
                                                     else:
                                                         st.error("生成失败")
                                                 except Exception as e:
@@ -858,7 +998,7 @@ elif page_selection == "knowledge_review":
                                                     if res.status_code == 200:
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["score"] = result_data
-                                                        save_analysis_result(note.get('id'), note, 'score', result_data)
+                                                        save_analysis_result(note.get('id'), note, 'score', result_data, st.session_state.get("access_token"))
                                                     else:
                                                         st.error("评分失败")
                                                 except Exception as e:
