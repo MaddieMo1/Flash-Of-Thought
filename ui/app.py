@@ -8,6 +8,7 @@ import networkx as nx
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import streamlit.components.v1 as components
 from streamlit_mic_recorder import mic_recorder, speech_to_text
 from streamlit_echarts import st_echarts
 from utils import save_analysis_result
@@ -30,6 +31,16 @@ API_BASE_URL = normalize_api_base_url(os.getenv("API_BASE_URL", "http://localhos
 API_SESSION = requests.Session()
 API_SESSION.trust_env = False
 APP_ICON_PATH = Path(__file__).resolve().parents[1] / "Icon" / "1460.png"
+AUTH_COOKIE_NAME = "flash_of_thought_token"
+AUTH_QUERY_PARAM = "auth_token"
+
+def mask_email(email):
+    if not email or "@" not in email:
+        return email or ""
+    name, domain = email.split("@", 1)
+    if len(name) <= 6:
+        return email
+    return f"{name[:3]}...{name[-3:]}@{domain}"
 
 def api_request(method, path, **kwargs):
     kwargs.setdefault("timeout", 60)
@@ -40,6 +51,23 @@ def api_request(method, path, **kwargs):
     if headers:
         kwargs["headers"] = headers
     return API_SESSION.request(method, f"{API_BASE_URL}{path}", **kwargs)
+
+
+def run_auth_cookie_script(token=None, clear=False, reload_page=False):
+    if clear:
+        cookie_script = (
+            f"document.cookie = '{AUTH_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax';"
+            f"try {{ window.parent.document.cookie = '{AUTH_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax'; }} catch (e) {{}}"
+        )
+    else:
+        token_text = json.dumps(token or "")
+        cookie_script = (
+            f"const token = {token_text};"
+            f"document.cookie = '{AUTH_COOKIE_NAME}=' + encodeURIComponent(token) + '; path=/; max-age=604800; SameSite=Lax';"
+            f"try {{ window.parent.document.cookie = '{AUTH_COOKIE_NAME}=' + encodeURIComponent(token) + '; path=/; max-age=604800; SameSite=Lax'; }} catch (e) {{}}"
+        )
+    reload_script = "window.parent.location.reload();" if reload_page else ""
+    components.html(f"<script>{cookie_script}{reload_script}</script>", height=0)
 
 st.set_page_config(
     page_title="FlashOfThought",
@@ -221,6 +249,117 @@ st.markdown("""
         font-weight: 700;
     }
 
+    [data-testid="stSidebar"] .block-container {
+        padding-top: 1.35rem;
+        padding-bottom: 1.25rem;
+    }
+    .sidebar-brand {
+        margin-top: 0.35rem;
+        margin-bottom: 0.15rem;
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #F8FAFC;
+        letter-spacing: 0;
+    }
+    .sidebar-account {
+        margin: 0.15rem 0 1rem;
+        color: #718096;
+        font-size: 0.84rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sidebar-section-title {
+        margin: 1.35rem 0 0.65rem;
+        color: #F8FAFC;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    [data-testid="stSidebar"] hr {
+        margin: 1.25rem 0;
+        border-color: rgba(255, 255, 255, 0.08) !important;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] {
+        gap: 0.35rem;
+    }
+    [data-testid="stSidebar"] div[data-testid="stRadio"] > div,
+    [data-testid="stSidebar"] div[role="radiogroup"] {
+        width: 100%;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] label {
+        width: 100%;
+        min-height: 2.45rem;
+        padding: 0.45rem 0.7rem;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        background: transparent;
+        transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
+        background: linear-gradient(90deg, rgba(0, 212, 255, 0.18), rgba(123, 97, 255, 0.08));
+        border-color: rgba(0, 212, 255, 0.28);
+        box-shadow: inset 3px 0 0 #00D4FF;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child {
+        display: none;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] label p {
+        color: #CBD5E1 !important;
+        font-weight: 650;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) p {
+        color: #FFFFFF !important;
+    }
+    .sidebar-footer {
+        margin-top: 1.3rem;
+        color: #64748B;
+        font-size: 0.78rem;
+    }
+    .quota-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin: 0.25rem 0 0.15rem;
+        padding: 0.35rem 0.55rem;
+        border-radius: 999px;
+        color: #CFFAFE;
+        background: rgba(0, 212, 255, 0.1);
+        border: 1px solid rgba(0, 212, 255, 0.18);
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+    .plan-card {
+        min-height: 13.25rem;
+        padding: 1.05rem;
+        border-radius: 14px;
+        background: linear-gradient(145deg, rgba(30, 33, 43, 0.95), rgba(14, 17, 23, 0.9));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .plan-name {
+        color: #F8FAFC;
+        font-size: 1rem;
+        font-weight: 800;
+        margin-bottom: 0.35rem;
+    }
+    .plan-price {
+        color: #00D4FF;
+        font-size: 1.45rem;
+        font-weight: 850;
+        margin: 0.35rem 0;
+    }
+    .plan-desc {
+        min-height: 2.6rem;
+        color: #94A3B8;
+        font-size: 0.86rem;
+        line-height: 1.5;
+    }
+
     footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -239,6 +378,8 @@ def initialize_auth_state():
 def auth_error_message(response):
     try:
         detail = response.json().get("detail", response.text)
+        if isinstance(detail, dict):
+            return str(detail.get("message", detail))
         if isinstance(detail, list):
             return "；".join([item.get("msg", str(item)) for item in detail])
         return str(detail)
@@ -247,6 +388,9 @@ def auth_error_message(response):
 
 
 def clear_auth_state():
+    run_auth_cookie_script(clear=True)
+    if AUTH_QUERY_PARAM in st.query_params:
+        del st.query_params[AUTH_QUERY_PARAM]
     for key in [
         "access_token",
         "current_user",
@@ -259,6 +403,17 @@ def clear_auth_state():
     ]:
         st.session_state.pop(key, None)
     initialize_auth_state()
+
+
+def restore_auth_state_from_cookie():
+    if st.session_state.access_token:
+        return
+    token = st.context.cookies.get(AUTH_COOKIE_NAME)
+    if not token:
+        token = st.query_params.get(AUTH_QUERY_PARAM)
+    if token:
+        st.session_state.access_token = token
+        st.session_state.auth_checked = False
 
 
 def verify_saved_session():
@@ -302,8 +457,10 @@ def render_auth_page():
                     st.session_state.access_token = data["access_token"]
                     st.session_state.current_user = data["user"]
                     st.session_state.auth_checked = True
+                    st.query_params[AUTH_QUERY_PARAM] = data["access_token"]
                     st.toast("登录成功")
-                    st.rerun()
+                    run_auth_cookie_script(data["access_token"], reload_page=True)
+                    st.stop()
                 else:
                     st.error(f"登录失败：{auth_error_message(res)}")
             except Exception as e:
@@ -332,15 +489,91 @@ def render_auth_page():
                         st.session_state.access_token = data["access_token"]
                         st.session_state.current_user = data["user"]
                         st.session_state.auth_checked = True
+                        st.query_params[AUTH_QUERY_PARAM] = data["access_token"]
                         st.toast("注册成功")
-                        st.rerun()
+                        run_auth_cookie_script(data["access_token"], reload_page=True)
+                        st.stop()
                     else:
                         st.error(f"注册失败：{auth_error_message(res)}")
                 except Exception as e:
                     st.error(f"无法连接后端服务：{str(e)}")
 
 
+def format_price(amount_cents, currency="CNY"):
+    amount = amount_cents / 100
+    if currency == "CNY":
+        return f"¥{amount:.0f}"
+    return f"{currency} {amount:.2f}"
+
+
+def load_billing_account():
+    res = api_request("GET", "/billing/account", timeout=20)
+    if res.status_code != 200:
+        raise RuntimeError(auth_error_message(res))
+    return res.json()
+
+
+def render_billing_page():
+    st.header("额度管理")
+    st.caption("查看额度余额、使用流水，并通过本地模拟支付完成充值。")
+
+    try:
+        account = load_billing_account()
+        plans_res = api_request("GET", "/billing/plans", timeout=20)
+        if plans_res.status_code != 200:
+            st.error(f"加载套餐失败：{auth_error_message(plans_res)}")
+            return
+        plans = plans_res.json().get("plans", [])
+    except Exception as e:
+        st.error(f"加载额度信息失败：{str(e)}")
+        return
+
+    col_balance, col_purchased, col_spent = st.columns(3)
+    col_balance.metric("当前余额", f"{account.get('balance', 0)} 点")
+    col_purchased.metric("累计充值", f"{account.get('total_purchased', 0)} 点")
+    col_spent.metric("累计消耗", f"{account.get('total_spent', 0)} 点")
+
+    st.markdown("### 充值套餐")
+    plan_cols = st.columns(len(plans) or 1)
+    for idx, plan in enumerate(plans):
+        with plan_cols[idx]:
+            st.markdown(
+                f"""
+                <div class="plan-card">
+                    <div class="plan-name">{plan.get('name')}</div>
+                    <div class="plan-price">{format_price(plan.get('amount_cents', 0), plan.get('currency', 'CNY'))}</div>
+                    <div><b>{plan.get('credits')} 点额度</b></div>
+                    <div class="plan-desc">{plan.get('description', '')}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button("模拟支付并充值", key=f"buy_{plan.get('id')}", type="primary", use_container_width=True):
+                pay_res = api_request("POST", "/billing/payments/mock", json={"plan_id": plan.get("id")}, timeout=20)
+                if pay_res.status_code == 200:
+                    st.toast("充值成功")
+                    st.rerun()
+                else:
+                    st.error(f"充值失败：{auth_error_message(pay_res)}")
+
+    st.markdown("### 最近流水")
+    transactions = account.get("recent_transactions", [])
+    if not transactions:
+        st.info("暂无流水")
+        return
+
+    for item in transactions:
+        amount = int(item.get("amount", 0))
+        amount_text = f"+{amount}" if amount > 0 else str(amount)
+        created_at = item.get("created_at", "")[:19].replace("T", " ")
+        st.write(
+            f"**{amount_text} 点** · {item.get('description', '')}  "
+            f"余额 {item.get('balance_after', 0)} · {created_at}"
+        )
+
+
 initialize_auth_state()
+restore_auth_state_from_cookie()
 verify_saved_session()
 
 if not st.session_state.current_user:
@@ -351,19 +584,30 @@ st.title("FlashOfThought : 语音想法助手")
 
 # Sidebar for navigation
 with st.sidebar:
-    st.image(str(APP_ICON_PATH), width=50)
-    st.caption(f"已登录：{st.session_state.current_user.get('email')}")
-    if st.button("退出登录", use_container_width=True):
-        clear_auth_state()
-        st.rerun()
+    sidebar_balance = None
+    try:
+        sidebar_balance = load_billing_account().get("balance")
+    except Exception:
+        pass
+
+    st.image(str(APP_ICON_PATH), width=54)
+    st.markdown(
+        f"""
+        <div class="sidebar-brand">FlashOfThought</div>
+        <div class="sidebar-account">已登录 · {mask_email(st.session_state.current_user.get('email'))}</div>
+        {f'<div class="quota-pill">额度 {sidebar_balance} 点</div>' if sidebar_balance is not None else ''}
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown("---")
-    st.markdown("### 功能导航")
+    st.markdown('<div class="sidebar-section-title">功能导航</div>', unsafe_allow_html=True)
     
     # Page Option Mapping
     page_options = {
         "record_idea": "🎙️ 录入想法",
         "knowledge_review": "🔍 知识回顾",
-        "knowledge_graph": "🕸️ 知识图谱"
+        "knowledge_graph": "🕸️ 知识图谱",
+        "billing": "💳 额度管理",
     }
     page_selection = st.radio(
         "选择模式", 
@@ -373,7 +617,10 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    st.caption("v0.1.0 | Maddie编写 并技术支持")
+    st.markdown('<div class="sidebar-footer">v0.1.0 · Maddie 技术支持</div>', unsafe_allow_html=True)
+    if st.button("退出登录", use_container_width=True):
+        clear_auth_state()
+        st.rerun()
 
 def process_audio(audio_data, file_name, file_type="audio/mp3"):
     """
@@ -406,9 +653,9 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                         st.session_state.current_file_url = file_url
                         st.rerun()
                     else:
-                        st.error(f"整理失败: {process_res.text}")
+                        st.error(f"整理失败: {auth_error_message(process_res)}")
             else:
-                st.error(f"上传失败: {upload_res.text}")
+                st.error(f"上传失败: {auth_error_message(upload_res)}")
         except Exception as e:
             st.error(f"发生错误: {str(e)}")
 
@@ -435,7 +682,7 @@ def process_text_input(text):
                 st.toast("✅ 整理成功！", icon="✨")
                 st.rerun()
             else:
-                st.error(f"整理失败: {process_res.text}")
+                st.error(f"整理失败: {auth_error_message(process_res)}")
         except Exception as e:
             st.error(f"发生错误: {str(e)}")
 
@@ -537,7 +784,7 @@ def display_note():
                         time.sleep(1) 
                         st.rerun() 
                     else:
-                        st.error(f"保存失败: {save_res.text}")
+                        st.error(f"保存失败: {auth_error_message(save_res)}")
                 except Exception as e:
                     st.error(f"连接失败: {str(e)}")
     
@@ -548,7 +795,10 @@ def display_note():
             st.session_state.current_file_url = ""
             st.rerun()
 
-if page_selection == "record_idea":
+if page_selection == "billing":
+    render_billing_page()
+
+elif page_selection == "record_idea":
     st.header("记录你的灵感")
     
     # Always try to display current note if exists
@@ -654,7 +904,7 @@ if page_selection == "record_idea":
                              if len(text) > 1:
                                  process_text_input(text)
                     else:
-                        st.error(f"语音识别失败: {upload_res.text}")
+                        st.error(f"语音识别失败: {auth_error_message(upload_res)}")
                 except Exception as e:
                     st.error(f"处理出错: {str(e)}")
 
@@ -681,7 +931,7 @@ elif page_selection == "knowledge_review":
                         if res.status_code == 200:
                             st.session_state.weekly_summary = res.json()
                         else:
-                            st.error(f"生成失败: {res.text}")
+                            st.error(f"生成失败: {auth_error_message(res)}")
                     except Exception as e:
                         st.error(f"连接失败: {str(e)}")
         
@@ -750,7 +1000,7 @@ elif page_selection == "knowledge_review":
                                     st.markdown("---")
                                     st.markdown(res.get("document", ""))
                         else:
-                            st.error(f"搜索失败: {search_res.text}")
+                            st.error(f"搜索失败: {auth_error_message(search_res)}")
                     except Exception as e:
                         st.error(f"连接失败: {str(e)}")
 
@@ -951,8 +1201,13 @@ elif page_selection == "knowledge_review":
 
                                 active_type = st.session_state.get(active_key)
                                 cache = st.session_state.get(cache_key, {})
+                                force_regenerate = False
 
-                                if active_type and active_type not in cache:
+                                if active_type and active_type in cache:
+                                    if st.button("🔄 重新生成", key=f"regen_{note.get('id')}_{active_type}", use_container_width=True):
+                                        force_regenerate = True
+
+                                if active_type and (force_regenerate or active_type not in cache):
                                     analysis_slot.empty()
                                     if active_type == "expand":
                                         with analysis_slot.container():
@@ -1099,7 +1354,7 @@ elif page_selection == "knowledge_review":
                                                     st.markdown(section_content)
                                                 st.write("") # Spacer
             else:
-                 st.error(f"加载失败: {list_res.text}")
+                 st.error(f"加载失败: {auth_error_message(list_res)}")
         except Exception as e:
             st.error(f"加载笔记失败: {str(e)}")
 
@@ -1111,7 +1366,7 @@ elif page_selection == "knowledge_graph":
         try:
             res = api_request("GET", "/graph")
             if res.status_code != 200:
-                st.error(f"获取图谱失败: {res.text}")
+                st.error(f"获取图谱失败: {auth_error_message(res)}")
                 raise RuntimeError("graph api failed")
             
             # Force UTF-8 decoding
