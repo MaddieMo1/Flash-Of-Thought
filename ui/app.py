@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import networkx as nx
 import pandas as pd
 import numpy as np
+from pathlib import Path
 from streamlit_mic_recorder import mic_recorder, speech_to_text
 from streamlit_echarts import st_echarts
 from utils import save_analysis_result
@@ -28,6 +29,7 @@ def normalize_api_base_url(raw_url):
 API_BASE_URL = normalize_api_base_url(os.getenv("API_BASE_URL", "http://localhost:8000/api/v1"))
 API_SESSION = requests.Session()
 API_SESSION.trust_env = False
+APP_ICON_PATH = Path(__file__).resolve().parents[1] / "Icon" / "1460.png"
 
 def api_request(method, path, **kwargs):
     kwargs.setdefault("timeout", 60)
@@ -41,7 +43,7 @@ def api_request(method, path, **kwargs):
 
 st.set_page_config(
     page_title="FlashOfThought",
-    page_icon="/Users/maddie/Trea/Project/Flash-Of-Thought-main/Flash-Of-Thought-main/Icon/1460.png",
+    page_icon=str(APP_ICON_PATH),
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -349,7 +351,7 @@ st.title("FlashOfThought : 语音想法助手")
 
 # Sidebar for navigation
 with st.sidebar:
-    st.image("/Users/maddie/Trea/Project/Flash-Of-Thought-main/Flash-Of-Thought-main/Icon/1460.png", width=50)
+    st.image(str(APP_ICON_PATH), width=50)
     st.caption(f"已登录：{st.session_state.current_user.get('email')}")
     if st.button("退出登录", use_container_width=True):
         clear_auth_state()
