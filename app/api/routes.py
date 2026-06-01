@@ -4,11 +4,35 @@ from app.services.oss_service import oss_service
 from app.services.llm_service import llm_service
 from app.services.rag_service import rag_service
 from app.services.auth_service import get_current_user
+from app.services.billing_service import billing_service
 from app.models.note import NoteStructure, NoteResponse
 from typing import List, Dict, Any
 from fastapi import Depends
 
 router = APIRouter()
+
+CREDIT_COSTS = {
+    "upload": 3,
+    "process": 1,
+    "analysis": 2,
+    "chat": 1,
+    "weekly_summary": 5,
+}
+
+
+@router.get("/billing/account", summary="Get quota account")
+async def get_billing_account(current_user: Dict[str, Any] = Depends(get_current_user)):
+    return billing_service.get_account(current_user["id"])
+
+
+@router.get("/billing/plans", summary="List quota recharge plans")
+async def list_billing_plans(current_user: Dict[str, Any] = Depends(get_current_user)):
+    return {"plans": billing_service.list_plans()}
+
+
+@router.post("/billing/payments/mock", summary="Create a mock paid recharge order")
+async def create_mock_payment(plan_id: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
+    return billing_service.create_mock_payment(current_user["id"], plan_id)
 
 @router.post("/upload", summary="Upload audio and transcribe")
 async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any] = Depends(get_current_user)):
@@ -16,6 +40,7 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
     Upload audio file to OSS and transcribe it using ASR.
     """
     try:
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["upload"])
         # Read file content
         content = await file.read()
         file_extension = file.filename.split(".")[-1] if "." in file.filename else "mp3"
@@ -26,6 +51,7 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
         
         # Transcribe
         transcription = llm_service.transcribe_audio(file_url)
+        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["upload"], "语音转写")
         
         return {
             "file_key": file_key,
@@ -72,7 +98,9 @@ async def process_text(raw_text: str = Body(..., embed=True), current_user: Dict
     Process raw text using LLM to generate a structured note.
     """
     try:
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["process"])
         structured_note = llm_service.structure_note(raw_text)
+        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["process"], "文本整理")
         return structured_note
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -119,7 +147,9 @@ async def list_notes(limit: int = 20, current_user: Dict[str, Any] = Depends(get
 @router.post("/analyze/expand", summary="Expand an idea")
 async def expand_idea(raw_text: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["analysis"])
         result = llm_service.expand_idea(raw_text)
+        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["analysis"], "AI 扩展想法")
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -127,7 +157,9 @@ async def expand_idea(raw_text: str = Body(..., embed=True), current_user: Dict[
 @router.post("/analyze/roadmap", summary="Generate roadmap")
 async def generate_roadmap(raw_text: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["analysis"])
         result = llm_service.generate_roadmap(raw_text)
+        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["analysis"], "AI 路线规划")
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -135,7 +167,9 @@ async def generate_roadmap(raw_text: str = Body(..., embed=True), current_user: 
 @router.post("/analyze/score", summary="Score an idea")
 async def score_idea(raw_text: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["analysis"])
         result = llm_service.score_idea(raw_text)
+        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["analysis"], "AI 灵感评分")
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -143,10 +177,12 @@ async def score_idea(raw_text: str = Body(..., embed=True), current_user: Dict[s
 @router.post("/chat", summary="Chat with knowledge base")
 async def chat_with_kb(query: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["chat"])
         # 1. Search relevant notes
         context_notes = rag_service.query_notes(query, limit=5, user_id=current_user["id"])
         # 2. Generate answer
         answer = llm_service.chat_with_notes(query, context_notes)
+        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["chat"], "知识库问答")
         return {"answer": answer, "context": context_notes}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -282,6 +318,7 @@ async def generate_weekly_summary(days: int = Body(7, embed=True), current_user:
     Generate a summary of notes from the last N days.
     """
     try:
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["weekly_summary"])
         import time
         end_ts = int(time.time())
         start_ts = end_ts - (days * 24 * 60 * 60)
@@ -291,6 +328,7 @@ async def generate_weekly_summary(days: int = Body(7, embed=True), current_user:
         
         # 2. Generate summary
         summary_data = llm_service.generate_weekly_summary(notes)
+        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["weekly_summary"], "AI 周报")
         
         return {
             "start_date": time.strftime('%Y-%m-%d', time.localtime(start_ts)),
