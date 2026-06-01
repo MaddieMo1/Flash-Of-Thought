@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import streamlit.components.v1 as components
-from streamlit_mic_recorder import mic_recorder, speech_to_text
 from streamlit_echarts import st_echarts
 from utils import save_analysis_result
 # from streamlit_agraph import agraph, Node, Edge, Config # Replaced with PyDeck for 3D
@@ -173,6 +172,9 @@ st.markdown("""
         box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
         background-color: rgba(14, 17, 23, 0.9);
     }
+    div[data-testid="InputInstructions"] {
+        display: none;
+    }
 
     .stTabs [data-baseweb="tab-list"] {
         gap: 2rem;
@@ -247,6 +249,74 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         color: #00D4FF;
         font-weight: 700;
+    }
+
+    .auth-kicker {
+        color: #00D4FF;
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 1rem;
+    }
+    .auth-title {
+        color: #F8FAFC;
+        font-size: clamp(2.5rem, 6vw, 4.5rem);
+        font-weight: 850;
+        line-height: 0.96;
+        letter-spacing: 0;
+        margin: 0 0 1.15rem;
+    }
+    .auth-title span {
+        color: #00D4FF;
+    }
+    .auth-subtitle {
+        max-width: 34rem;
+        color: #94A3B8;
+        font-size: 1.02rem;
+        line-height: 1.7;
+        margin-bottom: 2rem;
+    }
+    .auth-feature-list {
+        display: grid;
+        gap: 0.85rem;
+        margin-top: 1.5rem;
+    }
+    .auth-feature {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: #CBD5E1;
+        font-size: 0.95rem;
+    }
+    .auth-feature-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 10px;
+        background: rgba(0, 212, 255, 0.1);
+        border: 1px solid rgba(0, 212, 255, 0.2);
+        color: #67E8F9;
+        font-weight: 800;
+    }
+    .auth-panel-title {
+        color: #F8FAFC;
+        font-size: 1.4rem;
+        font-weight: 800;
+        margin: 0.1rem 0 0.25rem;
+    }
+    .auth-panel-copy {
+        color: #94A3B8;
+        font-size: 0.92rem;
+        margin-bottom: 0.85rem;
+    }
+    .auth-footnote {
+        margin-top: 0.85rem;
+        color: #64748B;
+        font-size: 0.82rem;
+        text-align: center;
     }
 
     [data-testid="stSidebar"] .block-container {
@@ -387,8 +457,7 @@ def auth_error_message(response):
         return response.text
 
 
-def clear_auth_state():
-    run_auth_cookie_script(clear=True)
+def clear_auth_state(reload_page=False):
     if AUTH_QUERY_PARAM in st.query_params:
         del st.query_params[AUTH_QUERY_PARAM]
     for key in [
@@ -400,12 +469,22 @@ def clear_auth_state():
         "current_file_url",
         "chat_history",
         "weekly_summary",
+        "billing_account_cache",
+        "notes_list_cache",
+        "graph_data_cache",
     ]:
         st.session_state.pop(key, None)
+    for key in list(st.session_state.keys()):
+        if key.startswith(("analysis_cache_", "active_analysis_", "edit_mode_")):
+            st.session_state.pop(key, None)
+    st.session_state.auth_logged_out = True
+    run_auth_cookie_script(clear=True, reload_page=reload_page)
     initialize_auth_state()
 
 
 def restore_auth_state_from_cookie():
+    if st.session_state.get("auth_logged_out"):
+        return
     if st.session_state.access_token:
         return
     token = st.context.cookies.get(AUTH_COOKIE_NAME)
@@ -433,70 +512,96 @@ def verify_saved_session():
 
 
 def render_auth_page():
-    st.title("FlashOfThought : 语音想法助手")
-    st.caption("登录后，你的灵感、搜索、图谱和周报都会绑定到当前账号。")
+    st.markdown('<div style="height: 3.5rem;"></div>', unsafe_allow_html=True)
+    hero_col, form_col = st.columns([1.05, 0.95], gap="large")
 
-    login_tab, register_tab = st.tabs(["登录", "注册"])
+    with hero_col:
+        st.markdown(
+            """
+            <div class="auth-kicker">FlashOfThought</div>
+            <div class="auth-title">把一闪而过的想法<span>接住</span></div>
+            <div class="auth-subtitle">
+                录音、整理、扩展、路线图和评分都会绑定到你的账号。下一次回来，灵感还在原处。
+            </div>
+            <div class="auth-feature-list">
+                <div class="auth-feature"><span class="auth-feature-icon">1</span><span>语音和文字快速整理成结构化笔记</span></div>
+                <div class="auth-feature"><span class="auth-feature-icon">2</span><span>用 AI 扩展想法、生成路线并评估可行性</span></div>
+                <div class="auth-feature"><span class="auth-feature-icon">3</span><span>搜索、图谱和周报围绕你的知识库持续沉淀</span></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    with login_tab:
-        with st.form("login_form"):
-            email = st.text_input("邮箱", key="login_email")
-            password = st.text_input("密码", type="password", key="login_password")
-            submitted = st.form_submit_button("登录", type="primary", use_container_width=True)
+    with form_col:
+        with st.container(border=True):
+            st.markdown('<div class="auth-panel-title">进入工作台</div>', unsafe_allow_html=True)
+            st.markdown('<div class="auth-panel-copy">使用邮箱登录，或创建一个新账号。</div>', unsafe_allow_html=True)
 
-        if submitted:
-            try:
-                res = api_request(
-                    "POST",
-                    "/auth/login",
-                    json={"email": email, "password": password},
-                    timeout=20,
-                )
-                if res.status_code == 200:
-                    data = res.json()
-                    st.session_state.access_token = data["access_token"]
-                    st.session_state.current_user = data["user"]
-                    st.session_state.auth_checked = True
-                    st.query_params[AUTH_QUERY_PARAM] = data["access_token"]
-                    st.toast("登录成功")
-                    run_auth_cookie_script(data["access_token"], reload_page=True)
-                    st.stop()
-                else:
-                    st.error(f"登录失败：{auth_error_message(res)}")
-            except Exception as e:
-                st.error(f"无法连接后端服务：{str(e)}")
+            login_tab, register_tab = st.tabs(["登录", "注册"])
 
-    with register_tab:
-        with st.form("register_form"):
-            email = st.text_input("邮箱", key="register_email")
-            password = st.text_input("密码（至少 8 位）", type="password", key="register_password")
-            confirm_password = st.text_input("确认密码", type="password", key="register_confirm_password")
-            submitted = st.form_submit_button("注册并登录", type="primary", use_container_width=True)
+            with login_tab:
+                with st.form("login_form"):
+                    email = st.text_input("邮箱", key="login_email", placeholder="you@example.com")
+                    password = st.text_input("密码", type="password", key="login_password")
+                    submitted = st.form_submit_button("登录", type="primary", use_container_width=True)
 
-        if submitted:
-            if password != confirm_password:
-                st.error("两次输入的密码不一致")
-            else:
-                try:
-                    res = api_request(
-                        "POST",
-                        "/auth/register",
-                        json={"email": email, "password": password},
-                        timeout=20,
-                    )
-                    if res.status_code == 200:
-                        data = res.json()
-                        st.session_state.access_token = data["access_token"]
-                        st.session_state.current_user = data["user"]
-                        st.session_state.auth_checked = True
-                        st.query_params[AUTH_QUERY_PARAM] = data["access_token"]
-                        st.toast("注册成功")
-                        run_auth_cookie_script(data["access_token"], reload_page=True)
-                        st.stop()
+                if submitted:
+                    try:
+                        res = api_request(
+                            "POST",
+                            "/auth/login",
+                            json={"email": email, "password": password},
+                            timeout=20,
+                        )
+                        if res.status_code == 200:
+                            data = res.json()
+                            st.session_state.pop("auth_logged_out", None)
+                            st.session_state.access_token = data["access_token"]
+                            st.session_state.current_user = data["user"]
+                            st.session_state.auth_checked = True
+                            st.query_params[AUTH_QUERY_PARAM] = data["access_token"]
+                            st.toast("登录成功")
+                            run_auth_cookie_script(data["access_token"], reload_page=True)
+                            st.stop()
+                        else:
+                            st.error(f"登录失败：{auth_error_message(res)}")
+                    except Exception as e:
+                        st.error(f"无法连接后端服务：{str(e)}")
+
+            with register_tab:
+                with st.form("register_form"):
+                    email = st.text_input("邮箱", key="register_email", placeholder="you@example.com")
+                    password = st.text_input("密码（至少 8 位）", type="password", key="register_password")
+                    confirm_password = st.text_input("确认密码", type="password", key="register_confirm_password")
+                    submitted = st.form_submit_button("注册并登录", type="primary", use_container_width=True)
+
+                if submitted:
+                    if password != confirm_password:
+                        st.error("两次输入的密码不一致")
                     else:
-                        st.error(f"注册失败：{auth_error_message(res)}")
-                except Exception as e:
-                    st.error(f"无法连接后端服务：{str(e)}")
+                        try:
+                            res = api_request(
+                                "POST",
+                                "/auth/register",
+                                json={"email": email, "password": password},
+                                timeout=20,
+                            )
+                            if res.status_code == 200:
+                                data = res.json()
+                                st.session_state.pop("auth_logged_out", None)
+                                st.session_state.access_token = data["access_token"]
+                                st.session_state.current_user = data["user"]
+                                st.session_state.auth_checked = True
+                                st.query_params[AUTH_QUERY_PARAM] = data["access_token"]
+                                st.toast("注册成功")
+                                run_auth_cookie_script(data["access_token"], reload_page=True)
+                                st.stop()
+                            else:
+                                st.error(f"注册失败：{auth_error_message(res)}")
+                        except Exception as e:
+                            st.error(f"无法连接后端服务：{str(e)}")
+
+            st.markdown('<div class="auth-footnote">你的数据会绑定到当前账号，便于跨设备继续回顾。</div>', unsafe_allow_html=True)
 
 
 def format_price(amount_cents, currency="CNY"):
@@ -506,11 +611,57 @@ def format_price(amount_cents, currency="CNY"):
     return f"{currency} {amount:.2f}"
 
 
-def load_billing_account():
+def load_billing_account(use_cache=True):
+    cache_key = "billing_account_cache"
+    now = time.time()
+    cached = st.session_state.get(cache_key)
+    if use_cache and cached and now - cached.get("loaded_at", 0) < 30:
+        return cached["data"]
+
     res = api_request("GET", "/billing/account", timeout=20)
     if res.status_code != 200:
         raise RuntimeError(auth_error_message(res))
-    return res.json()
+    data = res.json()
+    st.session_state[cache_key] = {"data": data, "loaded_at": now}
+    return data
+
+
+def invalidate_billing_cache():
+    st.session_state.pop("billing_account_cache", None)
+
+
+def invalidate_notes_cache():
+    st.session_state.pop("notes_list_cache", None)
+    st.session_state.pop("graph_data_cache", None)
+
+
+def load_notes(limit=20, use_cache=True):
+    cache_key = "notes_list_cache"
+    cached = st.session_state.get(cache_key)
+    if use_cache and cached and cached.get("limit") == limit:
+        return cached["data"]
+
+    list_res = api_request("GET", "/notes", params={"limit": limit})
+    if list_res.status_code != 200:
+        raise RuntimeError(auth_error_message(list_res))
+    notes = list_res.json()
+    st.session_state[cache_key] = {"limit": limit, "data": notes}
+    return notes
+
+
+def load_graph_data(use_cache=True):
+    cache_key = "graph_data_cache"
+    cached = st.session_state.get(cache_key)
+    if use_cache and cached:
+        return cached["data"]
+
+    res = api_request("GET", "/graph")
+    if res.status_code != 200:
+        raise RuntimeError(auth_error_message(res))
+    res.encoding = 'utf-8'
+    data = res.json()
+    st.session_state[cache_key] = {"data": data}
+    return data
 
 
 def render_billing_page():
@@ -551,6 +702,7 @@ def render_billing_page():
             if st.button("模拟支付并充值", key=f"buy_{plan.get('id')}", type="primary", use_container_width=True):
                 pay_res = api_request("POST", "/billing/payments/mock", json={"plan_id": plan.get("id")}, timeout=20)
                 if pay_res.status_code == 200:
+                    invalidate_billing_cache()
                     st.toast("充值成功")
                     st.rerun()
                 else:
@@ -619,8 +771,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown('<div class="sidebar-footer">v0.1.0 · Maddie 技术支持</div>', unsafe_allow_html=True)
     if st.button("退出登录", use_container_width=True):
-        clear_auth_state()
-        st.rerun()
+        clear_auth_state(reload_page=True)
+        st.stop()
 
 def process_audio(audio_data, file_name, file_type="audio/mp3"):
     """
@@ -775,6 +927,7 @@ def display_note():
                     }
                     save_res = api_request("POST", "/save", json=save_payload)
                     if save_res.status_code == 200:
+                        invalidate_notes_cache()
                         st.balloons()
                         st.toast("保存成功!", icon="💾")
                         # Clear current note
@@ -805,7 +958,7 @@ elif page_selection == "record_idea":
     display_note()
     
     if "current_note" not in st.session_state or not st.session_state.current_note:
-        tab1, tab2, tab3, tab4 = st.tabs(["📤 上传文件", "🎤 麦克风录音", "📝 文字输入", "⚡ 语音指令"])
+        tab1, tab2, tab3 = st.tabs(["📤 上传文件", "🎤 麦克风录音", "📝 文字输入"])
     
         with tab1:
             audio_file = st.file_uploader("拖拽或选择音频文件", type=['mp3', 'wav', 'm4a', 'aac'])
@@ -854,59 +1007,6 @@ elif page_selection == "record_idea":
                 if "text_input_val" in st.session_state:
                      st.session_state.text_input_val = ""
                 process_text_input(text_input)
-
-        with tab4:
-            st.markdown("### 🎙️ 闪念指令模式")
-            st.info("点击下方按钮开始录音，说完点击停止。尝试说：'闪念，记录一个新的AI想法...'")
-            
-            # Use mic_recorder instead of speech_to_text for better compatibility
-            audio = mic_recorder(
-                start_prompt="🔴 点击开始指令 (录音中...)",
-                stop_prompt="⏹️ 完成并发送",
-                key='audio_command',
-                format="wav",
-                use_container_width=True
-            )
-            
-            if audio:
-                st.toast("正在分析语音指令...", icon="🔄")
-                
-                try:
-                    # Construct file for upload
-                    files = {"file": ("command.wav", audio['bytes'], "audio/wav")}
-                    
-                    # Call upload API (which does ASR)
-                    upload_res = api_request("POST", "/upload", files=files)
-                    
-                    if upload_res.status_code == 200:
-                        upload_data = upload_res.json()
-                        text = upload_data.get("raw_text", "")
-                        
-                        st.success(f"识别内容: {text}")
-                        
-                        # Logic for command parsing
-                        # Simple keyword detection
-                        if text.startswith("闪念") or text.startswith("记录") or "闪念" in text[:10]:
-                            # Extract content
-                            content = text.replace("闪念", "", 1).replace("记录", "", 1).strip()
-                             # Remove leading punctuation
-                            import re
-                            content = re.sub(r'^[，,。.]+', '', content).strip()
-                            
-                            if content:
-                                st.toast(f"正在处理: {content[:10]}...", icon="🧠")
-                                process_text_input(content)
-                            else:
-                                st.warning("指令内容为空")
-                        else:
-                             # Fallback
-                             st.warning("未检测到'闪念'，但已为您记录。")
-                             if len(text) > 1:
-                                 process_text_input(text)
-                    else:
-                        st.error(f"语音识别失败: {auth_error_message(upload_res)}")
-                except Exception as e:
-                    st.error(f"处理出错: {str(e)}")
 
 elif page_selection == "knowledge_review":
     st.header("知识库")
@@ -1060,21 +1160,21 @@ elif page_selection == "knowledge_review":
         st.subheader("📚 最近笔记")
     with col_refresh:
         if st.button("🔄 刷新", use_container_width=True):
+            st.session_state.pop("notes_list_cache", None)
             # Reset per-note analysis UI state so refresh doesn't look like data disappeared
             for k in list(st.session_state.keys()):
                 if k.startswith("active_analysis_"):
                     del st.session_state[k]
             st.rerun()
 
-    with st.spinner("正在加载笔记列表..."):
+    notes_cache = st.session_state.get("notes_list_cache")
+    with st.spinner("正在加载笔记列表..." if not notes_cache else "正在显示缓存笔记..."):
         try:
-            list_res = api_request("GET", "/notes", params={"limit": 20})
-            if list_res.status_code == 200:
-                notes = list_res.json()
-                if not notes:
-                    st.info("还没有笔记，快去录入一些想法吧！")
-                else:
-                    for note in notes:
+            notes = load_notes(limit=20)
+            if not notes:
+                st.info("还没有笔记，快去录入一些想法吧！")
+            else:
+                for note in notes:
                         meta = note.get("metadata", {})
                         with st.expander(f"📝 {meta.get('title', '无标题')}"):
                             st.caption(f"📅 创建时间: {meta.get('created_at', '未知')}")
@@ -1089,6 +1189,7 @@ elif page_selection == "knowledge_review":
                                     try:
                                         del_res = api_request("DELETE", f"/notes/{note.get('id')}")
                                         if del_res.status_code == 200:
+                                            invalidate_notes_cache()
                                             st.toast("删除成功!")
                                             time.sleep(1)
                                             st.rerun()
@@ -1122,6 +1223,7 @@ elif page_selection == "knowledge_review":
                                         try:
                                             upd_res = api_request("PUT", f"/notes/{note.get('id')}", json=updated_note)
                                             if upd_res.status_code == 200:
+                                                invalidate_notes_cache()
                                                 st.toast("修改成功!")
                                                 st.session_state[f"edit_mode_{note.get('id')}"] = False
                                                 time.sleep(1)
@@ -1353,8 +1455,6 @@ elif page_selection == "knowledge_review":
                                                 else:
                                                     st.markdown(section_content)
                                                 st.write("") # Spacer
-            else:
-                 st.error(f"加载失败: {auth_error_message(list_res)}")
         except Exception as e:
             st.error(f"加载笔记失败: {str(e)}")
 
@@ -1362,16 +1462,10 @@ elif page_selection == "knowledge_graph":
     st.header("🌌 知识图谱")
     st.caption("探索你的知识星系：核心想法 → 功能分类 → 知识卡片")
 
-    with st.spinner("正在构建知识图谱..."):
+    graph_cache = st.session_state.get("graph_data_cache")
+    with st.spinner("正在构建知识图谱..." if not graph_cache else "正在显示缓存图谱..."):
         try:
-            res = api_request("GET", "/graph")
-            if res.status_code != 200:
-                st.error(f"获取图谱失败: {auth_error_message(res)}")
-                raise RuntimeError("graph api failed")
-            
-            # Force UTF-8 decoding
-            res.encoding = 'utf-8'
-            data = res.json()
+            data = load_graph_data()
             nodes_data = data.get("nodes", [])
             edges_data = data.get("edges", [])
 
