@@ -81,9 +81,9 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
     .main .block-container {
-        padding-top: 3rem;
+        padding-top: 2rem;
         padding-bottom: 3rem;
-        max-width: 1000px;
+        max-width: 1180px;
     }
 
     html, body, [class*="css"] {
@@ -249,6 +249,88 @@ st.markdown("""
     [data-testid="stMetricValue"] {
         color: #00D4FF;
         font-weight: 700;
+    }
+
+    .page-head {
+        margin: 0 0 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .page-kicker {
+        color: #00D4FF;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 0.45rem;
+    }
+    .page-title {
+        color: #F8FAFC;
+        font-size: clamp(1.85rem, 3vw, 2.8rem);
+        font-weight: 850;
+        line-height: 1.05;
+        letter-spacing: 0;
+        margin-bottom: 0.45rem;
+    }
+    .page-copy {
+        color: #94A3B8;
+        max-width: 46rem;
+        font-size: 0.98rem;
+        line-height: 1.65;
+    }
+    .work-surface {
+        padding: 1.1rem 1.15rem;
+        border-radius: 14px;
+        background: rgba(18, 22, 30, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .section-label {
+        color: #F8FAFC;
+        font-size: 1rem;
+        font-weight: 800;
+        margin: 0 0 0.2rem;
+    }
+    .section-copy {
+        color: #94A3B8;
+        font-size: 0.88rem;
+        line-height: 1.55;
+        margin-bottom: 0.75rem;
+    }
+    .capture-strip {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.8rem;
+        margin-bottom: 1rem;
+    }
+    .capture-stat {
+        padding: 0.85rem;
+        border-radius: 12px;
+        background: rgba(0, 212, 255, 0.06);
+        border: 1px solid rgba(0, 212, 255, 0.14);
+    }
+    .capture-stat strong {
+        display: block;
+        color: #F8FAFC;
+        font-size: 0.95rem;
+        margin-bottom: 0.2rem;
+    }
+    .capture-stat span {
+        color: #8EA4B8;
+        font-size: 0.82rem;
+    }
+    .note-count {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.55rem;
+        border-radius: 999px;
+        color: #CFFAFE;
+        background: rgba(0, 212, 255, 0.09);
+        border: 1px solid rgba(0, 212, 255, 0.18);
+        font-size: 0.78rem;
+        font-weight: 800;
+    }
+    .graph-toolbar {
+        margin: 0.75rem 0 1rem;
     }
 
     .auth-kicker {
@@ -470,8 +552,12 @@ def clear_auth_state(reload_page=False):
         "chat_history",
         "weekly_summary",
         "billing_account_cache",
+        "billing_plans_cache",
+        "billing_auto_loaded",
         "notes_list_cache",
+        "notes_auto_loaded",
         "graph_data_cache",
+        "graph_auto_loaded",
     ]:
         st.session_state.pop(key, None)
     for key in list(st.session_state.keys()):
@@ -626,13 +712,26 @@ def load_billing_account(use_cache=True):
     return data
 
 
+def get_cached_billing_account():
+    cached = st.session_state.get("billing_account_cache")
+    return cached.get("data") if cached else None
+
+
+def get_cached_billing_plans():
+    return st.session_state.get("billing_plans_cache")
+
+
 def invalidate_billing_cache():
     st.session_state.pop("billing_account_cache", None)
+    st.session_state.pop("billing_plans_cache", None)
+    st.session_state.pop("billing_auto_loaded", None)
 
 
 def invalidate_notes_cache():
     st.session_state.pop("notes_list_cache", None)
     st.session_state.pop("graph_data_cache", None)
+    st.session_state.pop("notes_auto_loaded", None)
+    st.session_state.pop("graph_auto_loaded", None)
 
 
 def load_notes(limit=20, use_cache=True):
@@ -664,19 +763,59 @@ def load_graph_data(use_cache=True):
     return data
 
 
-def render_billing_page():
-    st.header("额度管理")
-    st.caption("查看额度余额、使用流水，并通过本地模拟支付完成充值。")
+def render_page_header(kicker, title, copy):
+    st.markdown(
+        f"""
+        <div class="page-head">
+            <div class="page-kicker">{kicker}</div>
+            <div class="page-title">{title}</div>
+            <div class="page-copy">{copy}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    try:
-        account = load_billing_account()
-        plans_res = api_request("GET", "/billing/plans", timeout=20)
-        if plans_res.status_code != 200:
-            st.error(f"加载套餐失败：{auth_error_message(plans_res)}")
-            return
-        plans = plans_res.json().get("plans", [])
-    except Exception as e:
-        st.error(f"加载额度信息失败：{str(e)}")
+
+def render_billing_page():
+    render_page_header(
+        "Account",
+        "额度管理",
+        "查看额度余额、使用流水，并通过本地模拟支付完成充值。",
+    )
+
+    account = get_cached_billing_account()
+    plans = get_cached_billing_plans()
+    load_billing_now = not st.session_state.get("billing_auto_loaded")
+
+    col_status, col_action = st.columns([4, 1])
+    with col_status:
+        st.markdown(
+            '<div class="section-copy">额度信息会读取账户余额和最近流水；加载后切换页面会复用缓存。</div>',
+            unsafe_allow_html=True,
+        )
+    with col_action:
+        button_label = "加载额度" if not account or not plans else "🔄 刷新"
+        if st.button(button_label, use_container_width=True):
+            load_billing_now = True
+
+    if load_billing_now:
+        invalidate_billing_cache()
+        with st.spinner("正在加载额度信息..."):
+            try:
+                account = load_billing_account(use_cache=False)
+                plans_res = api_request("GET", "/billing/plans", timeout=20)
+                if plans_res.status_code != 200:
+                    st.error(f"加载套餐失败：{auth_error_message(plans_res)}")
+                    return
+                plans = plans_res.json().get("plans", [])
+                st.session_state.billing_plans_cache = plans
+                st.session_state.billing_auto_loaded = True
+            except Exception as e:
+                st.error(f"加载额度信息失败：{str(e)}")
+                return
+
+    if not account or not plans:
+        st.info("点击“加载额度”后查看余额、套餐和最近流水。")
         return
 
     col_balance, col_purchased, col_spent = st.columns(3)
@@ -732,15 +871,12 @@ if not st.session_state.current_user:
     render_auth_page()
     st.stop()
 
-st.title("FlashOfThought : 语音想法助手")
-
 # Sidebar for navigation
 with st.sidebar:
     sidebar_balance = None
-    try:
-        sidebar_balance = load_billing_account().get("balance")
-    except Exception:
-        pass
+    cached_account = get_cached_billing_account()
+    if cached_account:
+        sidebar_balance = cached_account.get("balance")
 
     st.image(str(APP_ICON_PATH), width=54)
     st.markdown(
@@ -952,24 +1088,46 @@ if page_selection == "billing":
     render_billing_page()
 
 elif page_selection == "record_idea":
-    st.header("记录你的灵感")
+    render_page_header(
+        "Capture",
+        "记录灵感",
+        "把语音、文件或文字整理成结构化笔记，再保存进你的个人知识库。",
+    )
     
     # Always try to display current note if exists
     display_note()
     
     if "current_note" not in st.session_state or not st.session_state.current_note:
-        tab1, tab2, tab3 = st.tabs(["📤 上传文件", "🎤 麦克风录音", "📝 文字输入"])
+        st.markdown(
+            """
+            <div class="capture-strip">
+                <div class="capture-stat"><strong>文字输入</strong><span>适合直接整理脑中的想法草稿</span></div>
+                <div class="capture-stat"><strong>麦克风录音</strong><span>适合现场快速记录，还能重新录制</span></div>
+                <div class="capture-stat"><strong>上传文件</strong><span>适合会议录音、语音备忘和已有音频</span></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        tab1, tab2, tab3 = st.tabs(["📝 文字输入", "🎤 麦克风录音", "📤 上传文件"])
     
         with tab1:
-            audio_file = st.file_uploader("拖拽或选择音频文件", type=['mp3', 'wav', 'm4a', 'aac'])
-            if audio_file:
-                st.audio(audio_file)
-                if st.button("开始处理 (文件)", type="primary"):
-                    process_audio(audio_file, audio_file.name)
-                    st.rerun()
+            st.markdown('<div class="section-label">直接写下想法</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-copy">不用写完整，片段、要点或随手记都可以整理成笔记。</div>', unsafe_allow_html=True)
+            # Use session state to persist text input, or clear it if needed
+            if "text_input_val" not in st.session_state:
+                st.session_state.text_input_val = ""
+                
+            text_input = st.text_area("输入想法...", value=st.session_state.text_input_val, height=200, key="idea_text_area")
+            
+            if st.button("开始整理 (文字)", type="primary"):
+                # Clear previous state
+                if "text_input_val" in st.session_state:
+                     st.session_state.text_input_val = ""
+                process_text_input(text_input)
 
         with tab2:
-            st.info("请点击下方麦克风按钮开始录音")
+            st.markdown('<div class="section-label">现场录一段想法</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-copy">录完后确认处理；不满意可以重新录音。</div>', unsafe_allow_html=True)
             
             # Initialize session state for audio key if not exists
             if 'audio_key' not in st.session_state:
@@ -995,25 +1153,341 @@ elif page_selection == "record_idea":
                         st.rerun()
 
         with tab3:
-            st.markdown("直接输入文字想法，AI将为您自动整理")
-            # Use session state to persist text input, or clear it if needed
-            if "text_input_val" not in st.session_state:
-                st.session_state.text_input_val = ""
-                
-            text_input = st.text_area("输入想法...", value=st.session_state.text_input_val, height=200, key="idea_text_area")
-            
-            if st.button("开始整理 (文字)", type="primary"):
-                # Clear previous state
-                if "text_input_val" in st.session_state:
-                     st.session_state.text_input_val = ""
-                process_text_input(text_input)
+            st.markdown('<div class="section-label">从音频文件开始</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-copy">上传后会先转写，再整理为标题、摘要、要点和应用场景。</div>', unsafe_allow_html=True)
+            audio_file = st.file_uploader("拖拽或选择音频文件", type=['mp3', 'wav', 'm4a', 'aac'])
+            if audio_file:
+                st.audio(audio_file)
+                if st.button("开始处理 (文件)", type="primary"):
+                    process_audio(audio_file, audio_file.name)
+                    st.rerun()
 
 elif page_selection == "knowledge_review":
-    st.header("知识库")
+    render_page_header(
+        "Library",
+        "知识回顾",
+        "浏览最近笔记，按需搜索、对话或生成周报。这里是你的灵感沉淀区。",
+    )
     
     # Chat Review Mode
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+
+    notes_cache = st.session_state.get("notes_list_cache")
+    notes = notes_cache.get("data") if notes_cache and notes_cache.get("limit") == 20 else None
+    load_notes_now = notes is None and not st.session_state.get("notes_auto_loaded")
+
+    col_header, col_refresh = st.columns([4, 1])
+    with col_header:
+        if notes is None:
+            st.markdown('<div class="section-label">最近笔记</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="section-copy">点击加载最近笔记；加载后切换页面会直接使用缓存。</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div class="section-label">最近笔记 <span class="note-count">{len(notes)} 条</span></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                '<div class="section-copy">最近记录的灵感会优先显示；展开后可编辑、删除或继续做 AI 分析。</div>',
+                unsafe_allow_html=True,
+            )
+    with col_refresh:
+        button_label = "加载笔记" if notes is None else "🔄 刷新"
+        if st.button(button_label, use_container_width=True):
+            st.session_state.pop("notes_list_cache", None)
+            for k in list(st.session_state.keys()):
+                if k.startswith("active_analysis_"):
+                    del st.session_state[k]
+            load_notes_now = True
+
+    if load_notes_now:
+        with st.spinner("正在加载笔记列表..."):
+            try:
+                notes = load_notes(limit=20, use_cache=False)
+                st.session_state.notes_auto_loaded = True
+            except Exception as e:
+                notes = None
+                st.error(f"加载笔记失败: {str(e)}")
+
+    if notes is not None:
+        if not notes:
+            st.info("还没有笔记，快去录入一些想法吧！")
+        else:
+            for note in notes:
+                        meta = note.get("metadata", {})
+                        with st.expander(f"📝 {meta.get('title', '无标题')}"):
+                            st.caption(f"📅 创建时间: {meta.get('created_at', '未知')}")
+                            
+                            # Edit Mode Toggle
+                            if f"edit_mode_{note.get('id')}" not in st.session_state:
+                                st.session_state[f"edit_mode_{note.get('id')}"] = False
+                                
+                            col_btns = st.columns([1, 1, 4])
+                            with col_btns[0]:
+                                if st.button("🗑️ 删除", key=f"del_{note.get('id')}"):
+                                    try:
+                                        del_res = api_request("DELETE", f"/notes/{note.get('id')}")
+                                        if del_res.status_code == 200:
+                                            invalidate_notes_cache()
+                                            st.toast("删除成功!")
+                                            time.sleep(1)
+                                            st.rerun()
+                                    except Exception as e:
+                                        st.error(str(e))
+                            
+                            with col_btns[1]:
+                                if st.button("✏️ 编辑", key=f"edit_{note.get('id')}"):
+                                    st.session_state[f"edit_mode_{note.get('id')}"] = not st.session_state[f"edit_mode_{note.get('id')}"]
+                                    st.rerun()
+
+                            if st.session_state[f"edit_mode_{note.get('id')}"]:
+                                with st.form(key=f"form_{note.get('id')}"):
+                                    new_title = st.text_input("标题", value=meta.get('title', ''))
+                                    new_summary = st.text_area("摘要", value=meta.get('summary', ''))
+                                    new_tags = st.text_input("标签 (逗号分隔)", value=meta.get('tags', ''))
+                                    
+                                    # Try to extract core_ideas etc from document if possible, or just leave empty for now
+                                    # Since we don't store them in metadata individually, we can't easily edit them without parsing document text
+                                    # For MVP, we only support editing title, summary, tags.
+                                    
+                                    if st.form_submit_button("保存修改"):
+                                        updated_note = {
+                                            "title": new_title,
+                                            "summary": new_summary,
+                                            "core_ideas": [], 
+                                            "key_features": [],
+                                            "possible_applications": [],
+                                            "tags": [t.strip() for t in new_tags.split(',')]
+                                        }
+                                        try:
+                                            upd_res = api_request("PUT", f"/notes/{note.get('id')}", json=updated_note)
+                                            if upd_res.status_code == 200:
+                                                invalidate_notes_cache()
+                                                st.toast("修改成功!")
+                                                st.session_state[f"edit_mode_{note.get('id')}"] = False
+                                                time.sleep(1)
+                                                st.rerun()
+                                            else:
+                                                st.error("修改失败")
+                                        except Exception as e:
+                                            st.error(str(e))
+                            else:
+                                # Normal Display
+                                st.markdown(f"**摘要**: {meta.get('summary', '')}")
+                                
+                                tags = meta.get('tags', '')
+                                if tags:
+                                    # Check if it's a list or string
+                                    if isinstance(tags, str):
+                                        tags = [t.strip() for t in tags.split(',') if t.strip()]
+                                    st.markdown(" ".join([f"`#{t}`" for t in tags]))
+                                
+                                st.divider()
+                                
+                                # Deep Analysis Buttons
+                                col_an1, col_an2, col_an3 = st.columns(3)
+                                
+                                # Initialize cache structure if not exists
+                                if f"analysis_cache_{note.get('id')}" not in st.session_state:
+                                    st.session_state[f"analysis_cache_{note.get('id')}"] = {}
+                                
+                                # Pre-populate cache from persisted metadata
+                                if 'expanded_idea' in meta:
+                                    st.session_state[f"analysis_cache_{note.get('id')}"]["expand"] = meta['expanded_idea']
+                                    
+                                if 'roadmap' in meta:
+                                    st.session_state[f"analysis_cache_{note.get('id')}"]["roadmap"] = meta['roadmap']
+                                if 'score' in meta:
+                                    st.session_state[f"analysis_cache_{note.get('id')}"]["score"] = meta['score']
+
+                                clicked_action = None
+
+                                with col_an1:
+                                    has_expanded = "expand" in st.session_state[f"analysis_cache_{note.get('id')}"]
+                                    btn_label = "✨ 查看扩展" if has_expanded else "✨ 扩展想法"
+                                    
+                                    if st.button(btn_label, key=f"exp_{note.get('id')}"):
+                                        clicked_action = "expand"
+                                
+                                with col_an2:
+                                    has_roadmap = "roadmap" in st.session_state[f"analysis_cache_{note.get('id')}"]
+                                    btn_label = "📅 查看路线" if has_roadmap else "📅 生成路线"
+                                    
+                                    if st.button(btn_label, key=f"road_{note.get('id')}"):
+                                        clicked_action = "roadmap"
+                                
+                                with col_an3:
+                                    has_score = "score" in st.session_state[f"analysis_cache_{note.get('id')}"]
+                                    btn_label = "📊 查看评分" if has_score else "📊 灵感评分"
+                                    
+                                    if st.button(btn_label, key=f"score_{note.get('id')}"):
+                                        clicked_action = "score"
+
+                                active_key = f"active_analysis_{note.get('id')}"
+                                cache_key = f"analysis_cache_{note.get('id')}"
+
+                                if clicked_action:
+                                    if st.session_state.get(active_key) == clicked_action:
+                                        st.session_state.pop(active_key, None)
+                                    else:
+                                        st.session_state[active_key] = clicked_action
+
+                                analysis_slot = st.empty()
+
+                                active_type = st.session_state.get(active_key)
+                                cache = st.session_state.get(cache_key, {})
+                                force_regenerate = False
+
+                                if active_type and active_type in cache:
+                                    if st.button("🔄 重新生成", key=f"regen_{note.get('id')}_{active_type}", use_container_width=True):
+                                        force_regenerate = True
+
+                                if active_type and (force_regenerate or active_type not in cache):
+                                    analysis_slot.empty()
+                                    if active_type == "expand":
+                                        with analysis_slot.container():
+                                            with st.spinner("AI正在扩展想法..."):
+                                                try:
+                                                    res = api_request(
+                                                        "POST",
+                                                        "/analyze/expand",
+                                                        json={"raw_text": note.get("document", "")},
+                                                    )
+                                                    if res.status_code == 200:
+                                                        result_data = res.json()
+                                                        st.session_state[cache_key]["expand"] = result_data
+                                                        save_analysis_result(note.get('id'), note, 'expand', result_data, st.session_state.get("access_token"))
+                                                    else:
+                                                        st.error("扩展失败")
+                                                except Exception as e:
+                                                    st.error(str(e))
+                                    elif active_type == "roadmap":
+                                        with analysis_slot.container():
+                                            with st.spinner("AI正在规划路线..."):
+                                                try:
+                                                    res = api_request(
+                                                        "POST",
+                                                        "/analyze/roadmap",
+                                                        json={"raw_text": note.get("document", "")},
+                                                    )
+                                                    if res.status_code == 200:
+                                                        result_data = res.json()
+                                                        st.session_state[cache_key]["roadmap"] = result_data
+                                                        save_analysis_result(note.get('id'), note, 'roadmap', result_data, st.session_state.get("access_token"))
+                                                    else:
+                                                        st.error("生成失败")
+                                                except Exception as e:
+                                                    st.error(str(e))
+                                    elif active_type == "score":
+                                        with analysis_slot.container():
+                                            with st.spinner("AI正在评分..."):
+                                                try:
+                                                    res = api_request(
+                                                        "POST",
+                                                        "/analyze/score",
+                                                        json={"raw_text": note.get("document", "")},
+                                                    )
+                                                    if res.status_code == 200:
+                                                        result_data = res.json()
+                                                        st.session_state[cache_key]["score"] = result_data
+                                                        save_analysis_result(note.get('id'), note, 'score', result_data, st.session_state.get("access_token"))
+                                                    else:
+                                                        st.error("评分失败")
+                                                except Exception as e:
+                                                    st.error(str(e))
+                                    cache = st.session_state.get(cache_key, {})
+                                
+                                if active_type and active_type in cache:
+                                    data = cache[active_type]
+                                    with analysis_slot.container():
+                                        with st.container(border=True):
+                                            st.caption(f"🤖 AI分析: {active_type}")
+                                            
+                                            if active_type == 'score':
+                                                col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                                                col_s1.metric("创新性", f"{data.get('innovation')}/5")
+                                                col_s2.metric("商业价值", f"{data.get('business_value')}/5")
+                                                col_s3.metric("技术难度", f"{data.get('tech_difficulty')}/5")
+                                                col_s4.metric("可行性", f"{data.get('feasibility')}/5")
+                                                
+                                                reason_text = data.get('reason', '')
+                                                for marker in ["\n- ", "\n•", "\n* ", "\n1.", "\n2.", "\n3."]:
+                                                    idx = reason_text.find(marker)
+                                                    if idx != -1:
+                                                        reason_text = reason_text[:idx].strip()
+                                                        break
+                                                st.info(f"💡 理由: {reason_text}")
+
+                                            elif active_type == 'expand':
+                                                st.markdown("### 💡 AI扩展建议")
+                                                st.markdown("**1. 功能**:")
+                                                for f in data.get('features', []):
+                                                    st.markdown(f"- {f}")
+                                                st.markdown(f"**2. 产品形态**: {data.get('product_form')}")
+                                                st.markdown(f"**3. 商业模式**: {data.get('business_model')}")
+                                                st.markdown(f"**4. 技术实现**: {data.get('tech_implementation')}")
+                                                    
+                                            elif active_type == 'roadmap':
+                                                for phase in data.get('roadmap', []):
+                                                    st.markdown(f"**{phase.get('phase', '阶段')}**")
+                                                    for task in phase.get('tasks', []):
+                                                        st.markdown(f"- [ ] {task}")
+
+                                st.divider()
+
+                                with st.container(border=True):
+                                    st.caption("📌 笔记要点")
+                                    document_text = note.get("document", "")
+                                    sections = {
+                                        "Core Ideas": "🎯 核心观点",
+                                        "Key Features": "🛠️ 关键功能",
+                                        "Applications": "🚀 可能应用",
+                                        "Raw": "📝 原始记录"
+                                    }
+                                    
+                                    for key, label in sections.items():
+                                        start_marker = f"{key}: "
+                                        if start_marker in document_text:
+                                            start_idx = document_text.find(start_marker) + len(start_marker)
+                                            content_end = len(document_text)
+                                            
+                                            for next_key in ["Title:", "Summary:", "Core Ideas:", "Key Features:", "Applications:", "Raw:"]:
+                                                if next_key.strip() == key.strip() + ":":
+                                                    continue
+                                                    
+                                                next_marker = f"\n{next_key}" 
+                                                next_idx = document_text.find(next_marker, start_idx)
+                                                if next_idx != -1 and next_idx < content_end:
+                                                    content_end = next_idx
+                                            
+                                            section_content = document_text[start_idx:content_end].strip()
+                                            
+                                            if section_content and key == "Raw":
+                                                st.markdown(f"**{label}**")
+                                                st.text_area(
+                                                    "原始记录",
+                                                    value=section_content,
+                                                    height=120,
+                                                    disabled=True,
+                                                    label_visibility="collapsed",
+                                                    key=f"raw_text_{note.get('id')}",
+                                                )
+                                            elif section_content:
+                                                st.markdown(f"**{label}**")
+                                                if "," in section_content:
+                                                    for item in section_content.split(","):
+                                                        if item.strip():
+                                                            st.markdown(f"- {item.strip()}")
+                                                else:
+                                                    st.markdown(section_content)
+                                                st.write("")
+
+    st.divider()
+    st.markdown('<div class="section-label">知识工具</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-copy">搜索、聊天和周报不会自动刷新笔记列表；需要更新时点击上方刷新。</div>', unsafe_allow_html=True)
 
     tab_search, tab_chat, tab_summary = st.tabs(["🔎 智能搜索", "💬 聊天回顾", "📊 AI周报"])
 
@@ -1152,320 +1626,42 @@ elif page_selection == "knowledge_review":
                     except Exception as e:
                         st.error(f"连接错误: {str(e)}")
 
-    st.divider()
-
-    # Recent Notes Section
-    col_header, col_refresh = st.columns([4, 1])
-    with col_header:
-        st.subheader("📚 最近笔记")
-    with col_refresh:
-        if st.button("🔄 刷新", use_container_width=True):
-            st.session_state.pop("notes_list_cache", None)
-            # Reset per-note analysis UI state so refresh doesn't look like data disappeared
-            for k in list(st.session_state.keys()):
-                if k.startswith("active_analysis_"):
-                    del st.session_state[k]
-            st.rerun()
-
-    notes_cache = st.session_state.get("notes_list_cache")
-    with st.spinner("正在加载笔记列表..." if not notes_cache else "正在显示缓存笔记..."):
-        try:
-            notes = load_notes(limit=20)
-            if not notes:
-                st.info("还没有笔记，快去录入一些想法吧！")
-            else:
-                for note in notes:
-                        meta = note.get("metadata", {})
-                        with st.expander(f"📝 {meta.get('title', '无标题')}"):
-                            st.caption(f"📅 创建时间: {meta.get('created_at', '未知')}")
-                            
-                            # Edit Mode Toggle
-                            if f"edit_mode_{note.get('id')}" not in st.session_state:
-                                st.session_state[f"edit_mode_{note.get('id')}"] = False
-                                
-                            col_btns = st.columns([1, 1, 4])
-                            with col_btns[0]:
-                                if st.button("🗑️ 删除", key=f"del_{note.get('id')}"):
-                                    try:
-                                        del_res = api_request("DELETE", f"/notes/{note.get('id')}")
-                                        if del_res.status_code == 200:
-                                            invalidate_notes_cache()
-                                            st.toast("删除成功!")
-                                            time.sleep(1)
-                                            st.rerun()
-                                    except Exception as e:
-                                        st.error(str(e))
-                            
-                            with col_btns[1]:
-                                if st.button("✏️ 编辑", key=f"edit_{note.get('id')}"):
-                                    st.session_state[f"edit_mode_{note.get('id')}"] = not st.session_state[f"edit_mode_{note.get('id')}"]
-                                    st.rerun()
-
-                            if st.session_state[f"edit_mode_{note.get('id')}"]:
-                                with st.form(key=f"form_{note.get('id')}"):
-                                    new_title = st.text_input("标题", value=meta.get('title', ''))
-                                    new_summary = st.text_area("摘要", value=meta.get('summary', ''))
-                                    new_tags = st.text_input("标签 (逗号分隔)", value=meta.get('tags', ''))
-                                    
-                                    # Try to extract core_ideas etc from document if possible, or just leave empty for now
-                                    # Since we don't store them in metadata individually, we can't easily edit them without parsing document text
-                                    # For MVP, we only support editing title, summary, tags.
-                                    
-                                    if st.form_submit_button("保存修改"):
-                                        updated_note = {
-                                            "title": new_title,
-                                            "summary": new_summary,
-                                            "core_ideas": [], 
-                                            "key_features": [],
-                                            "possible_applications": [],
-                                            "tags": [t.strip() for t in new_tags.split(',')]
-                                        }
-                                        try:
-                                            upd_res = api_request("PUT", f"/notes/{note.get('id')}", json=updated_note)
-                                            if upd_res.status_code == 200:
-                                                invalidate_notes_cache()
-                                                st.toast("修改成功!")
-                                                st.session_state[f"edit_mode_{note.get('id')}"] = False
-                                                time.sleep(1)
-                                                st.rerun()
-                                            else:
-                                                st.error("修改失败")
-                                        except Exception as e:
-                                            st.error(str(e))
-                            else:
-                                # Normal Display
-                                st.markdown(f"**摘要**: {meta.get('summary', '')}")
-                                
-                                tags = meta.get('tags', '')
-                                if tags:
-                                    # Check if it's a list or string
-                                    if isinstance(tags, str):
-                                        tags = [t.strip() for t in tags.split(',') if t.strip()]
-                                    st.markdown(" ".join([f"`#{t}`" for t in tags]))
-                                
-                                st.divider()
-                                
-                                # Deep Analysis Buttons
-                                col_an1, col_an2, col_an3 = st.columns(3)
-                                
-                                # Initialize cache structure if not exists
-                                if f"analysis_cache_{note.get('id')}" not in st.session_state:
-                                    st.session_state[f"analysis_cache_{note.get('id')}"] = {}
-                                
-                                # Pre-populate cache from persisted metadata
-                                if 'expanded_idea' in meta:
-                                    st.session_state[f"analysis_cache_{note.get('id')}"]["expand"] = meta['expanded_idea']
-                                    # If existing, set active state to show it? No, user has to click button to show it,
-                                    # but we shouldn't re-fetch.
-                                    # Wait, user wants to see it automatically if it exists?
-                                    # "点击扩展想法按钮，还是会重新AI生成，而不是加载上次生成的结果"
-                                    # This means the button click logic is not checking the cache correctly or cache is empty.
-                                    
-                                if 'roadmap' in meta:
-                                    st.session_state[f"analysis_cache_{note.get('id')}"]["roadmap"] = meta['roadmap']
-                                if 'score' in meta:
-                                    st.session_state[f"analysis_cache_{note.get('id')}"]["score"] = meta['score']
-
-                                clicked_action = None
-
-                                with col_an1:
-                                    # Check if we have cached data to determine button label or style
-                                    has_expanded = "expand" in st.session_state[f"analysis_cache_{note.get('id')}"]
-                                    btn_label = "✨ 查看扩展" if has_expanded else "✨ 扩展想法"
-                                    
-                                    if st.button(btn_label, key=f"exp_{note.get('id')}"):
-                                        clicked_action = "expand"
-                                
-                                with col_an2:
-                                    has_roadmap = "roadmap" in st.session_state[f"analysis_cache_{note.get('id')}"]
-                                    btn_label = "📅 查看路线" if has_roadmap else "📅 生成路线"
-                                    
-                                    if st.button(btn_label, key=f"road_{note.get('id')}"):
-                                        clicked_action = "roadmap"
-                                
-                                with col_an3:
-                                    has_score = "score" in st.session_state[f"analysis_cache_{note.get('id')}"]
-                                    btn_label = "📊 查看评分" if has_score else "📊 灵感评分"
-                                    
-                                    if st.button(btn_label, key=f"score_{note.get('id')}"):
-                                        clicked_action = "score"
-
-                                active_key = f"active_analysis_{note.get('id')}"
-                                cache_key = f"analysis_cache_{note.get('id')}"
-
-                                if clicked_action:
-                                    if st.session_state.get(active_key) == clicked_action:
-                                        st.session_state.pop(active_key, None)
-                                    else:
-                                        st.session_state[active_key] = clicked_action
-
-                                analysis_slot = st.empty()
-
-                                active_type = st.session_state.get(active_key)
-                                cache = st.session_state.get(cache_key, {})
-                                force_regenerate = False
-
-                                if active_type and active_type in cache:
-                                    if st.button("🔄 重新生成", key=f"regen_{note.get('id')}_{active_type}", use_container_width=True):
-                                        force_regenerate = True
-
-                                if active_type and (force_regenerate or active_type not in cache):
-                                    analysis_slot.empty()
-                                    if active_type == "expand":
-                                        with analysis_slot.container():
-                                            with st.spinner("AI正在扩展想法..."):
-                                                try:
-                                                    res = api_request(
-                                                        "POST",
-                                                        "/analyze/expand",
-                                                        json={"raw_text": note.get("document", "")},
-                                                    )
-                                                    if res.status_code == 200:
-                                                        result_data = res.json()
-                                                        st.session_state[cache_key]["expand"] = result_data
-                                                        save_analysis_result(note.get('id'), note, 'expand', result_data, st.session_state.get("access_token"))
-                                                    else:
-                                                        st.error("扩展失败")
-                                                except Exception as e:
-                                                    st.error(str(e))
-                                    elif active_type == "roadmap":
-                                        with analysis_slot.container():
-                                            with st.spinner("AI正在规划路线..."):
-                                                try:
-                                                    res = api_request(
-                                                        "POST",
-                                                        "/analyze/roadmap",
-                                                        json={"raw_text": note.get("document", "")},
-                                                    )
-                                                    if res.status_code == 200:
-                                                        result_data = res.json()
-                                                        st.session_state[cache_key]["roadmap"] = result_data
-                                                        save_analysis_result(note.get('id'), note, 'roadmap', result_data, st.session_state.get("access_token"))
-                                                    else:
-                                                        st.error("生成失败")
-                                                except Exception as e:
-                                                    st.error(str(e))
-                                    elif active_type == "score":
-                                        with analysis_slot.container():
-                                            with st.spinner("AI正在评分..."):
-                                                try:
-                                                    res = api_request(
-                                                        "POST",
-                                                        "/analyze/score",
-                                                        json={"raw_text": note.get("document", "")},
-                                                    )
-                                                    if res.status_code == 200:
-                                                        result_data = res.json()
-                                                        st.session_state[cache_key]["score"] = result_data
-                                                        save_analysis_result(note.get('id'), note, 'score', result_data, st.session_state.get("access_token"))
-                                                    else:
-                                                        st.error("评分失败")
-                                                except Exception as e:
-                                                    st.error(str(e))
-                                    cache = st.session_state.get(cache_key, {})
-                                
-                                if active_type and active_type in cache:
-                                    data = cache[active_type]
-                                    with analysis_slot.container():
-                                        with st.container(border=True):
-                                            st.caption(f"🤖 AI分析: {active_type}")
-                                            
-                                            if active_type == 'score':
-                                                col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                                                col_s1.metric("创新性", f"{data.get('innovation')}/5")
-                                                col_s2.metric("商业价值", f"{data.get('business_value')}/5")
-                                                col_s3.metric("技术难度", f"{data.get('tech_difficulty')}/5")
-                                                col_s4.metric("可行性", f"{data.get('feasibility')}/5")
-                                                
-                                                reason_text = data.get('reason', '')
-                                                for marker in ["\n- ", "\n•", "\n* ", "\n1.", "\n2.", "\n3."]:
-                                                    idx = reason_text.find(marker)
-                                                    if idx != -1:
-                                                        reason_text = reason_text[:idx].strip()
-                                                        break
-                                                st.info(f"💡 理由: {reason_text}")
-
-                                            elif active_type == 'expand':
-                                                st.markdown("### 💡 AI扩展建议")
-                                                st.markdown("**1. 功能**:")
-                                                for f in data.get('features', []):
-                                                    st.markdown(f"- {f}")
-                                                st.markdown(f"**2. 产品形态**: {data.get('product_form')}")
-                                                st.markdown(f"**3. 商业模式**: {data.get('business_model')}")
-                                                st.markdown(f"**4. 技术实现**: {data.get('tech_implementation')}")
-                                                    
-                                            elif active_type == 'roadmap':
-                                                for phase in data.get('roadmap', []):
-                                                    st.markdown(f"**{phase.get('phase', '阶段')}**")
-                                                    for task in phase.get('tasks', []):
-                                                        st.markdown(f"- [ ] {task}")
-
-                                st.divider()
-
-                                with st.container(border=True):
-                                    st.caption("📌 笔记要点")
-                                    
-                                    # Try to parse the document content to display it nicely
-                                    # The document format is: Title: ...\nSummary: ...\nCore Ideas: ...\nKey Features: ...\nApplications: ...\nRaw: ...
-                                    document_text = note.get("document", "")
-                                    
-                                    # Simple parsing logic (can be improved)
-                                    sections = {
-                                        "Core Ideas": "🎯 核心观点",
-                                        "Key Features": "🛠️ 关键功能",
-                                        "Applications": "🚀 可能应用",
-                                        "Raw": "📝 原始记录"
-                                    }
-                                    
-                                    for key, label in sections.items():
-                                        start_marker = f"{key}: "
-                                        if start_marker in document_text:
-                                            start_idx = document_text.find(start_marker) + len(start_marker)
-                                            content_end = len(document_text)
-                                            
-                                            # Look for the next section header
-                                            for next_key in ["Title:", "Summary:", "Core Ideas:", "Key Features:", "Applications:", "Raw:"]:
-                                                # Ensure we don't find the current key itself if it appears later (unlikely but safe)
-                                                if next_key.strip() == key.strip() + ":":
-                                                    continue
-                                                    
-                                                next_marker = f"\n{next_key}" 
-                                                next_idx = document_text.find(next_marker, start_idx)
-                                                if next_idx != -1 and next_idx < content_end:
-                                                    content_end = next_idx
-                                            
-                                            section_content = document_text[start_idx:content_end].strip()
-                                            
-                                            if section_content and key == "Raw":
-                                                st.markdown(f"**{label}**")
-                                                st.text_area(
-                                                    "原始记录",
-                                                    value=section_content,
-                                                    height=120,
-                                                    disabled=True,
-                                                    label_visibility="collapsed",
-                                                    key=f"raw_text_{note.get('id')}",
-                                                )
-                                            elif section_content:
-                                                st.markdown(f"**{label}**")
-                                                if "," in section_content:
-                                                    for item in section_content.split(","):
-                                                        if item.strip():
-                                                            st.markdown(f"- {item.strip()}")
-                                                else:
-                                                    st.markdown(section_content)
-                                                st.write("") # Spacer
-        except Exception as e:
-            st.error(f"加载笔记失败: {str(e)}")
-
 elif page_selection == "knowledge_graph":
-    st.header("🌌 知识图谱")
-    st.caption("探索你的知识星系：核心想法 → 功能分类 → 知识卡片")
+    render_page_header(
+        "Graph",
+        "知识图谱",
+        "用关系图查看灵感、标签和笔记之间的连接，适合发现隐藏主题。",
+    )
 
     graph_cache = st.session_state.get("graph_data_cache")
-    with st.spinner("正在构建知识图谱..." if not graph_cache else "正在显示缓存图谱..."):
+    data = graph_cache.get("data") if graph_cache else None
+    load_graph_now = data is None and not st.session_state.get("graph_auto_loaded")
+
+    col_graph_status, col_graph_action = st.columns([4, 1])
+    with col_graph_status:
+        st.markdown(
+            '<div class="section-copy">图谱构建会读取全部笔记；已有缓存时切换页面会直接复用。</div>',
+            unsafe_allow_html=True,
+        )
+    with col_graph_action:
+        graph_button_label = "构建图谱" if data is None else "🔄 刷新"
+        if st.button(graph_button_label, use_container_width=True):
+            st.session_state.pop("graph_data_cache", None)
+            load_graph_now = True
+
+    if load_graph_now:
+        with st.spinner("正在构建知识图谱..."):
+            try:
+                data = load_graph_data(use_cache=False)
+                st.session_state.graph_auto_loaded = True
+            except Exception as e:
+                data = None
+                st.error(f"加载图谱时发生错误: {str(e)}")
+
+    if data is None:
+        st.info("点击“构建图谱”后加载知识关系；切换回来会保留缓存。")
+    else:
         try:
-            data = load_graph_data()
             nodes_data = data.get("nodes", [])
             edges_data = data.get("edges", [])
 
@@ -1473,6 +1669,7 @@ elif page_selection == "knowledge_graph":
                 st.info("暂无数据，请先录入一些想法。")
             else:
                 # Layout Control
+                st.markdown('<div class="graph-toolbar">', unsafe_allow_html=True)
                 col_controls = st.columns([1, 1, 1, 3])
                 with col_controls[0]:
                     layout_type = st.selectbox("布局模式", ["force", "circular"], format_func=lambda x: "力导向图" if x == "force" else "环形布局")
@@ -1480,6 +1677,7 @@ elif page_selection == "knowledge_graph":
                     show_labels = st.toggle("显示标签", value=True)
                 with col_controls[2]:
                     repulsion = st.slider("排斥力", 100, 2000, 1000) if layout_type == "force" else None
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 # Process nodes for ECharts
                 echart_nodes = []
