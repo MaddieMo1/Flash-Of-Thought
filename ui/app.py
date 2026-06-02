@@ -712,6 +712,14 @@ def load_billing_account(use_cache=True):
     return data
 
 
+def refresh_billing_account_silently():
+    st.session_state.pop("billing_account_cache", None)
+    try:
+        return load_billing_account(use_cache=False)
+    except Exception:
+        return None
+
+
 def get_cached_billing_account():
     cached = st.session_state.get("billing_account_cache")
     return cached.get("data") if cached else None
@@ -875,6 +883,8 @@ if not st.session_state.current_user:
 with st.sidebar:
     sidebar_balance = None
     cached_account = get_cached_billing_account()
+    if not cached_account:
+        cached_account = refresh_billing_account_silently()
     if cached_account:
         sidebar_balance = cached_account.get("balance")
 
@@ -1360,6 +1370,8 @@ elif page_selection == "knowledge_review":
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["expand"] = result_data
                                                         save_analysis_result(note.get('id'), note, 'expand', result_data, st.session_state.get("access_token"))
+                                                        refresh_billing_account_silently()
+                                                        st.rerun()
                                                     else:
                                                         st.error("扩展失败")
                                                 except Exception as e:
@@ -1377,6 +1389,8 @@ elif page_selection == "knowledge_review":
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["roadmap"] = result_data
                                                         save_analysis_result(note.get('id'), note, 'roadmap', result_data, st.session_state.get("access_token"))
+                                                        refresh_billing_account_silently()
+                                                        st.rerun()
                                                     else:
                                                         st.error("生成失败")
                                                 except Exception as e:
@@ -1394,6 +1408,8 @@ elif page_selection == "knowledge_review":
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["score"] = result_data
                                                         save_analysis_result(note.get('id'), note, 'score', result_data, st.session_state.get("access_token"))
+                                                        refresh_billing_account_silently()
+                                                        st.rerun()
                                                     else:
                                                         st.error("评分失败")
                                                 except Exception as e:
