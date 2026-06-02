@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Body
+from fastapi import APIRouter, UploadFile, File, HTTPException, Body, Query
 import re
 from app.services.oss_service import oss_service
 from app.services.llm_service import llm_service
@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from fastapi import Depends
 
 router = APIRouter()
+GRAPH_DATA_CACHE: Dict[str, Dict[str, Any]] = {}
 
 CREDIT_COSTS = {
     "upload": 3,
@@ -18,6 +19,10 @@ CREDIT_COSTS = {
     "chat": 1,
     "weekly_summary": 5,
 }
+
+
+def invalidate_graph_cache(user_id: str):
+    GRAPH_DATA_CACHE.pop(user_id, None)
 
 
 @router.get("/billing/account", summary="Get quota account")
@@ -70,6 +75,7 @@ async def delete_note(note_id: str, current_user: Dict[str, Any] = Depends(get_c
         success = rag_service.delete_note(note_id, user_id=current_user["id"])
         if not success:
             raise HTTPException(status_code=404, detail="Note not found")
+        invalidate_graph_cache(current_user["id"])
         return {"status": "deleted", "id": note_id}
     except HTTPException:
         raise
@@ -86,6 +92,7 @@ async def update_note_route(note_id: str, note: NoteStructure, current_user: Dic
         success = rag_service.update_note(note_id, note_dict, user_id=current_user["id"])
         if not success:
             raise HTTPException(status_code=404, detail="Note not found")
+        invalidate_graph_cache(current_user["id"])
         return {"status": "updated", "id": note_id}
     except HTTPException:
         raise
@@ -118,6 +125,7 @@ async def save_note(
     try:
         note_dict = note.model_dump()
         note_id = rag_service.add_note(note_dict, raw_text, source_url, user_id=current_user["id"])
+        invalidate_graph_cache(current_user["id"])
         return {"id": note_id, "status": "saved"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -188,7 +196,7 @@ async def chat_with_kb(query: str = Body(..., embed=True), current_user: Dict[st
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/graph", summary="Get knowledge graph data")
-async def get_graph_data(current_user: Dict[str, Any] = Depends(get_current_user)):
+async def get_graph_data(refresh: bool = Query(False), current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Get nodes and edges for knowledge graph visualization.
 
@@ -198,6 +206,10 @@ async def get_graph_data(current_user: Dict[str, Any] = Depends(get_current_user
     - Level 3: Knowledge items (notes)
     """
     try:
+        user_id = current_user["id"]
+        if not refresh and user_id in GRAPH_DATA_CACHE:
+            return GRAPH_DATA_CACHE[user_id]
+
         notes = rag_service.get_all_notes(limit=0, user_id=current_user["id"])
 
         nodes: List[Dict[str, Any]] = []
@@ -307,7 +319,9 @@ async def get_graph_data(current_user: Dict[str, Any] = Depends(get_current_user
                     # Connect Note -> Tag
                     edges.append({"source": note_id, "target": tag_id})
 
-        return {"nodes": nodes, "edges": edges}
+        graph_data = {"nodes": nodes, "edges": edges}
+        GRAPH_DATA_CACHE[user_id] = graph_data
+        return graph_data
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

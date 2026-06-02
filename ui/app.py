@@ -779,7 +779,7 @@ def load_graph_data(use_cache=True):
         data = fetch_graph_data_cached(st.session_state.get("access_token") or "")
     else:
         fetch_graph_data_cached.clear()
-        res = api_request("GET", "/graph")
+        res = api_request("GET", "/graph", params={"refresh": True})
         if res.status_code != 200:
             raise RuntimeError(auth_error_message(res))
         res.encoding = 'utf-8'
@@ -1810,7 +1810,7 @@ elif page_selection == "knowledge_graph":
                             "links": echart_edges,
                             "categories": categories,
                             "roam": True,
-                            "zoom": 0.576,
+                            "zoom": 0.9,
                             "scaleLimit": {
                                 "min": 0.4,
                                 "max": 4
@@ -1843,7 +1843,7 @@ elif page_selection == "knowledge_graph":
                 }
 
                 # Render Graph
-                st_echarts(options=option, height="700px", theme="dark")
+                st_echarts(options=option, height="520px", theme="dark")
                 
                 # Help text
                 st.caption("💡 操作提示：滚轮缩放 | 拖拽移动 | 点击节点高亮连接关系 | 悬停查看详情")
