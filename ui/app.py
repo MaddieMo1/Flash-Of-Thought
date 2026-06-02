@@ -1114,6 +1114,7 @@ def display_note():
                     }
                     save_res = api_request("POST", "/save", json=save_payload)
                     if save_res.status_code == 200:
+                        refresh_billing_account_silently()
                         invalidate_notes_cache()
                         st.balloons()
                         st.toast("保存成功!", icon="💾")
@@ -1130,10 +1131,16 @@ def display_note():
     
     with col_clear:
         if st.button("🗑️ 放弃并清除", use_container_width=False):
-            st.session_state.current_note = None
-            st.session_state.current_raw_text = ""
-            st.session_state.current_file_url = ""
-            st.rerun()
+            with st.spinner("Discarding..."):
+                discard_res = api_request("POST", "/discard", json={"source_url": file_url})
+                if discard_res.status_code == 200:
+                    refresh_billing_account_silently()
+                    st.session_state.current_note = None
+                    st.session_state.current_raw_text = ""
+                    st.session_state.current_file_url = ""
+                    st.rerun()
+                else:
+                    st.error(f"Discard failed: {auth_error_message(discard_res)}")
 
 if page_selection == "billing":
     render_billing_page()

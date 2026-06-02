@@ -25,6 +25,14 @@ def invalidate_graph_cache(user_id: str):
     GRAPH_DATA_CACHE.pop(user_id, None)
 
 
+def capture_credit_cost(source_url: str = "") -> int:
+    return CREDIT_COSTS["upload"] + CREDIT_COSTS["process"] if source_url else CREDIT_COSTS["process"]
+
+
+def capture_credit_description(source_url: str = "") -> str:
+    return "语音转写与文本整理" if source_url else "文本整理"
+
+
 @router.get("/billing/account", summary="Get quota account")
 async def get_billing_account(current_user: Dict[str, Any] = Depends(get_current_user)):
     return billing_service.get_account(current_user["id"])
@@ -45,7 +53,7 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
     Upload audio file to OSS and transcribe it using ASR.
     """
     try:
-        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["upload"])
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["upload"] + CREDIT_COSTS["process"])
         # Read file content
         content = await file.read()
         file_extension = file.filename.split(".")[-1] if "." in file.filename else "mp3"
@@ -58,7 +66,6 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
         transcription = llm_service.transcribe_audio(file_url)
         if not transcription.strip():
             raise HTTPException(status_code=422, detail="语音转写结果为空，请重录或上传更清晰的音频")
-        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["upload"], "语音转写")
         
         return {
             "file_key": file_key,
@@ -111,8 +118,9 @@ async def process_text(raw_text: str = Body(..., embed=True), current_user: Dict
     try:
         billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["process"])
         structured_note = llm_service.structure_note(raw_text)
-        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["process"], "文本整理")
         return structured_note
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -127,10 +135,26 @@ async def save_note(
     Save the structured note and raw text to ChromaDB.
     """
     try:
+        charge_amount = capture_credit_cost(source_url)
+        billing_service.ensure_credits(current_user["id"], charge_amount)
         note_dict = note.model_dump()
         note_id = rag_service.add_note(note_dict, raw_text, source_url, user_id=current_user["id"])
+        billing_service.spend_credits(current_user["id"], charge_amount, capture_credit_description(source_url))
         invalidate_graph_cache(current_user["id"])
         return {"id": note_id, "status": "saved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/discard", summary="Discard pending capture and charge quota")
+async def discard_capture(source_url: str = Body("", embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
+    try:
+        charge_amount = capture_credit_cost(source_url)
+        return billing_service.spend_credits(current_user["id"], charge_amount, capture_credit_description(source_url))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
