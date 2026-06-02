@@ -944,6 +944,8 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
     with st.spinner("🚀 正在上传并转写音频..."):
         try:
             # 1. Upload
+            if hasattr(audio_data, "seek"):
+                audio_data.seek(0)
             files = {"file": (file_name, audio_data, file_type)}
             upload_res = api_request("POST", "/upload", files=files)
             
