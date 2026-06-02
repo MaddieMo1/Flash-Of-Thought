@@ -1808,7 +1808,7 @@ elif page_selection == "knowledge_graph":
                 }
 
                 # Render Graph
-                st_echarts(options=option, height="700px", theme="dark")
+                st_echarts(options=option, height="570px", theme="dark")
                 
                 # Help text
                 st.caption("💡 操作提示：滚轮缩放 | 拖拽移动 | 点击节点高亮连接关系 | 悬停查看详情")
