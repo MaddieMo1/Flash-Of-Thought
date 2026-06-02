@@ -3,6 +3,7 @@ import requests
 import json
 import os
 import time
+import hashlib
 import plotly.graph_objects as go
 import networkx as nx
 import pandas as pd
@@ -570,6 +571,7 @@ def clear_auth_state(reload_page=False):
         "notes_auto_loaded",
         "graph_data_cache",
         "graph_auto_loaded",
+        "processed_audio_signatures",
     ]:
         st.session_state.pop(key, None)
     for key in list(st.session_state.keys()):
@@ -937,16 +939,32 @@ with st.sidebar:
         clear_auth_state(reload_page=True)
         st.stop()
 
+def get_audio_payload_and_signature(audio_data):
+    if hasattr(audio_data, "seek"):
+        audio_data.seek(0)
+    if hasattr(audio_data, "getvalue"):
+        payload = audio_data.getvalue()
+    else:
+        payload = audio_data.read()
+    if hasattr(audio_data, "seek"):
+        audio_data.seek(0)
+    return payload, hashlib.sha256(payload).hexdigest()
+
+
 def process_audio(audio_data, file_name, file_type="audio/mp3"):
     """
     Handle audio processing: Upload -> Transcribe -> Structure -> Display
     """
     with st.spinner("🚀 正在上传并转写音频..."):
         try:
+            payload, audio_signature = get_audio_payload_and_signature(audio_data)
+            processed_signatures = st.session_state.setdefault("processed_audio_signatures", set())
+            if audio_signature in processed_signatures:
+                st.warning("这段音频已经处理过，避免重复扣额度。需要重新处理请重新选择文件或重新录音。")
+                return
+
             # 1. Upload
-            if hasattr(audio_data, "seek"):
-                audio_data.seek(0)
-            files = {"file": (file_name, audio_data, file_type)}
+            files = {"file": (file_name, payload, file_type)}
             upload_res = api_request("POST", "/upload", files=files)
             
             if upload_res.status_code == 200:
@@ -971,6 +989,7 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                         st.session_state.current_note = process_res.json()
                         st.session_state.current_raw_text = raw_text
                         st.session_state.current_file_url = file_url
+                        processed_signatures.add(audio_signature)
                         st.rerun()
                     else:
                         st.error(f"整理失败: {auth_error_message(process_res)}")
