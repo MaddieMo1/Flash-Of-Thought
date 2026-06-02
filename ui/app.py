@@ -951,6 +951,9 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                 upload_data = upload_res.json()
                 raw_text = upload_data.get("raw_text", "")
                 file_url = upload_data.get("file_url", "")
+                if not raw_text.strip():
+                    st.error("转写结果为空，请重录或上传更清晰的音频")
+                    return
                 
                 st.toast("✅ 转写完成!", icon="🎉")
                 

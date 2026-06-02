@@ -56,6 +56,8 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
         
         # Transcribe
         transcription = llm_service.transcribe_audio(file_url)
+        if not transcription.strip():
+            raise HTTPException(status_code=422, detail="语音转写结果为空，请重录或上传更清晰的音频")
         billing_service.spend_credits(current_user["id"], CREDIT_COSTS["upload"], "语音转写")
         
         return {
@@ -63,6 +65,8 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
             "file_url": file_url,
             "raw_text": transcription
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
