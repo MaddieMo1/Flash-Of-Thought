@@ -26,3 +26,8 @@ dist-ssr
 .env
 __pycache__/
 data/users.sqlite3
+data/chroma_db/
+prod-data/
+prod-static/
+*.sqlite3
+*.sqlite3-*
