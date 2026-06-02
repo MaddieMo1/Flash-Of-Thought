@@ -52,6 +52,18 @@ def api_request(method, path, **kwargs):
     return API_SESSION.request(method, f"{API_BASE_URL}{path}", **kwargs)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_graph_data_cached(access_token):
+    headers = {}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    res = API_SESSION.request("GET", f"{API_BASE_URL}/graph", headers=headers, timeout=60)
+    if res.status_code != 200:
+        raise RuntimeError(auth_error_message(res))
+    res.encoding = 'utf-8'
+    return res.json()
+
+
 def run_auth_cookie_script(token=None, clear=False, reload_page=False):
     if clear:
         cookie_script = (
@@ -740,6 +752,7 @@ def invalidate_notes_cache():
     st.session_state.pop("graph_data_cache", None)
     st.session_state.pop("notes_auto_loaded", None)
     st.session_state.pop("graph_auto_loaded", None)
+    fetch_graph_data_cached.clear()
 
 
 def load_notes(limit=20, use_cache=True):
@@ -762,11 +775,15 @@ def load_graph_data(use_cache=True):
     if use_cache and cached:
         return cached["data"]
 
-    res = api_request("GET", "/graph")
-    if res.status_code != 200:
-        raise RuntimeError(auth_error_message(res))
-    res.encoding = 'utf-8'
-    data = res.json()
+    if use_cache:
+        data = fetch_graph_data_cached(st.session_state.get("access_token") or "")
+    else:
+        fetch_graph_data_cached.clear()
+        res = api_request("GET", "/graph")
+        if res.status_code != 200:
+            raise RuntimeError(auth_error_message(res))
+        res.encoding = 'utf-8'
+        data = res.json()
     st.session_state[cache_key] = {"data": data}
     return data
 
@@ -1652,6 +1669,7 @@ elif page_selection == "knowledge_graph":
     graph_cache = st.session_state.get("graph_data_cache")
     data = graph_cache.get("data") if graph_cache else None
     load_graph_now = data is None and not st.session_state.get("graph_auto_loaded")
+    force_graph_refresh = False
 
     col_graph_status, col_graph_action = st.columns([4, 1])
     with col_graph_status:
@@ -1664,11 +1682,12 @@ elif page_selection == "knowledge_graph":
         if st.button(graph_button_label, use_container_width=True):
             st.session_state.pop("graph_data_cache", None)
             load_graph_now = True
+            force_graph_refresh = True
 
     if load_graph_now:
         with st.spinner("正在构建知识图谱..."):
             try:
-                data = load_graph_data(use_cache=False)
+                data = load_graph_data(use_cache=not force_graph_refresh)
                 st.session_state.graph_auto_loaded = True
             except Exception as e:
                 data = None
