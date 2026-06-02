@@ -1841,7 +1841,7 @@ elif page_selection == "knowledge_graph":
                             "links": echart_edges,
                             "categories": categories,
                             "roam": True,
-                            "zoom": 0.9,
+                            "zoom": 0.576,
                             "scaleLimit": {
                                 "min": 0.4,
                                 "max": 4
@@ -1874,7 +1874,7 @@ elif page_selection == "knowledge_graph":
                 }
 
                 # Render Graph
-                st_echarts(options=option, height="520px", theme="dark")
+                st_echarts(options=option, height="700px", theme="dark")
                 
                 # Help text
                 st.caption("💡 操作提示：滚轮缩放 | 拖拽移动 | 点击节点高亮连接关系 | 悬停查看详情")
