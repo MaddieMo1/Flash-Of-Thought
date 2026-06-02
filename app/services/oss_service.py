@@ -42,23 +42,25 @@ class OssService:
         scheme = parsed.scheme or "https"
         return f"{scheme}://{hostname}"
         
-    def upload_file(self, file_content: bytes, file_extension: str = "mp3") -> str:
+    def upload_file(self, file_content: bytes, file_extension: str = "mp3", user_id: str = "") -> str:
         """
         Upload bytes to OSS or Local and return the file key (path)
         """
         filename = f"{int(time.time())}_{uuid.uuid4().hex[:8]}.{file_extension}"
+        object_key = f"audio/{user_id}/{filename}" if user_id else filename
         
         if self.mode == 'oss':
-            result = self.bucket.put_object(filename, file_content)
+            result = self.bucket.put_object(object_key, file_content)
             
             if result.status != 200:
                 raise Exception(f"Failed to upload to OSS: {result.status}")
         else:
-            file_path = os.path.join(self.local_storage_path, filename)
+            file_path = os.path.join(self.local_storage_path, object_key)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, "wb") as f:
                 f.write(file_content)
-            
-        return filename
+
+        return object_key
 
     def get_file_url(self, object_key: str) -> str:
         """

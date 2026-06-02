@@ -51,7 +51,7 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
         file_extension = file.filename.split(".")[-1] if "." in file.filename else "mp3"
         
         # Upload to OSS
-        file_key = oss_service.upload_file(content, file_extension)
+        file_key = oss_service.upload_file(content, file_extension, user_id=current_user["id"])
         file_url = oss_service.get_file_url(file_key)
         
         # Transcribe
