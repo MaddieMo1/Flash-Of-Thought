@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Body
+from fastapi import APIRouter, UploadFile, File, HTTPException, Body, Query
 import re
 from app.services.oss_service import oss_service
 from app.services.llm_service import llm_service
@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from fastapi import Depends
 
 router = APIRouter()
+GRAPH_DATA_CACHE: Dict[str, Dict[str, Any]] = {}
 
 CREDIT_COSTS = {
     "upload": 3,
@@ -18,6 +19,18 @@ CREDIT_COSTS = {
     "chat": 1,
     "weekly_summary": 5,
 }
+
+
+def invalidate_graph_cache(user_id: str):
+    GRAPH_DATA_CACHE.pop(user_id, None)
+
+
+def capture_credit_cost(source_url: str = "") -> int:
+    return CREDIT_COSTS["upload"] + CREDIT_COSTS["process"] if source_url else CREDIT_COSTS["process"]
+
+
+def capture_credit_description(source_url: str = "") -> str:
+    return "语音转写与文本整理" if source_url else "文本整理"
 
 
 @router.get("/billing/account", summary="Get quota account")
@@ -40,24 +53,27 @@ async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any
     Upload audio file to OSS and transcribe it using ASR.
     """
     try:
-        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["upload"])
+        billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["upload"] + CREDIT_COSTS["process"])
         # Read file content
         content = await file.read()
         file_extension = file.filename.split(".")[-1] if "." in file.filename else "mp3"
         
         # Upload to OSS
-        file_key = oss_service.upload_file(content, file_extension)
+        file_key = oss_service.upload_file(content, file_extension, user_id=current_user["id"])
         file_url = oss_service.get_file_url(file_key)
         
         # Transcribe
         transcription = llm_service.transcribe_audio(file_url)
-        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["upload"], "语音转写")
+        if not transcription.strip():
+            raise HTTPException(status_code=422, detail="语音转写结果为空，请重录或上传更清晰的音频")
         
         return {
             "file_key": file_key,
             "file_url": file_url,
             "raw_text": transcription
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -70,6 +86,7 @@ async def delete_note(note_id: str, current_user: Dict[str, Any] = Depends(get_c
         success = rag_service.delete_note(note_id, user_id=current_user["id"])
         if not success:
             raise HTTPException(status_code=404, detail="Note not found")
+        invalidate_graph_cache(current_user["id"])
         return {"status": "deleted", "id": note_id}
     except HTTPException:
         raise
@@ -86,6 +103,7 @@ async def update_note_route(note_id: str, note: NoteStructure, current_user: Dic
         success = rag_service.update_note(note_id, note_dict, user_id=current_user["id"])
         if not success:
             raise HTTPException(status_code=404, detail="Note not found")
+        invalidate_graph_cache(current_user["id"])
         return {"status": "updated", "id": note_id}
     except HTTPException:
         raise
@@ -100,8 +118,9 @@ async def process_text(raw_text: str = Body(..., embed=True), current_user: Dict
     try:
         billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["process"])
         structured_note = llm_service.structure_note(raw_text)
-        billing_service.spend_credits(current_user["id"], CREDIT_COSTS["process"], "文本整理")
         return structured_note
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -116,9 +135,26 @@ async def save_note(
     Save the structured note and raw text to ChromaDB.
     """
     try:
+        charge_amount = capture_credit_cost(source_url)
+        billing_service.ensure_credits(current_user["id"], charge_amount)
         note_dict = note.model_dump()
         note_id = rag_service.add_note(note_dict, raw_text, source_url, user_id=current_user["id"])
+        billing_service.spend_credits(current_user["id"], charge_amount, capture_credit_description(source_url))
+        invalidate_graph_cache(current_user["id"])
         return {"id": note_id, "status": "saved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/discard", summary="Discard pending capture and charge quota")
+async def discard_capture(source_url: str = Body("", embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
+    try:
+        charge_amount = capture_credit_cost(source_url)
+        return billing_service.spend_credits(current_user["id"], charge_amount, capture_credit_description(source_url))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -188,7 +224,7 @@ async def chat_with_kb(query: str = Body(..., embed=True), current_user: Dict[st
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/graph", summary="Get knowledge graph data")
-async def get_graph_data(current_user: Dict[str, Any] = Depends(get_current_user)):
+async def get_graph_data(refresh: bool = Query(False), current_user: Dict[str, Any] = Depends(get_current_user)):
     """
     Get nodes and edges for knowledge graph visualization.
 
@@ -198,6 +234,10 @@ async def get_graph_data(current_user: Dict[str, Any] = Depends(get_current_user
     - Level 3: Knowledge items (notes)
     """
     try:
+        user_id = current_user["id"]
+        if not refresh and user_id in GRAPH_DATA_CACHE:
+            return GRAPH_DATA_CACHE[user_id]
+
         notes = rag_service.get_all_notes(limit=0, user_id=current_user["id"])
 
         nodes: List[Dict[str, Any]] = []
@@ -307,7 +347,9 @@ async def get_graph_data(current_user: Dict[str, Any] = Depends(get_current_user
                     # Connect Note -> Tag
                     edges.append({"source": note_id, "target": tag_id})
 
-        return {"nodes": nodes, "edges": edges}
+        graph_data = {"nodes": nodes, "edges": edges}
+        GRAPH_DATA_CACHE[user_id] = graph_data
+        return graph_data
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

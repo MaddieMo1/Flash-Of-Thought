@@ -3,6 +3,7 @@ import requests
 import json
 import os
 import time
+import hashlib
 import plotly.graph_objects as go
 import networkx as nx
 import pandas as pd
@@ -50,6 +51,18 @@ def api_request(method, path, **kwargs):
     if headers:
         kwargs["headers"] = headers
     return API_SESSION.request(method, f"{API_BASE_URL}{path}", **kwargs)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_graph_data_cached(access_token):
+    headers = {}
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    res = API_SESSION.request("GET", f"{API_BASE_URL}/graph", headers=headers, timeout=60)
+    if res.status_code != 200:
+        raise RuntimeError(auth_error_message(res))
+    res.encoding = 'utf-8'
+    return res.json()
 
 
 def run_auth_cookie_script(token=None, clear=False, reload_page=False):
@@ -558,6 +571,7 @@ def clear_auth_state(reload_page=False):
         "notes_auto_loaded",
         "graph_data_cache",
         "graph_auto_loaded",
+        "processed_audio_signatures",
     ]:
         st.session_state.pop(key, None)
     for key in list(st.session_state.keys()):
@@ -712,6 +726,14 @@ def load_billing_account(use_cache=True):
     return data
 
 
+def refresh_billing_account_silently():
+    st.session_state.pop("billing_account_cache", None)
+    try:
+        return load_billing_account(use_cache=False)
+    except Exception:
+        return None
+
+
 def get_cached_billing_account():
     cached = st.session_state.get("billing_account_cache")
     return cached.get("data") if cached else None
@@ -732,6 +754,7 @@ def invalidate_notes_cache():
     st.session_state.pop("graph_data_cache", None)
     st.session_state.pop("notes_auto_loaded", None)
     st.session_state.pop("graph_auto_loaded", None)
+    fetch_graph_data_cached.clear()
 
 
 def load_notes(limit=20, use_cache=True):
@@ -754,11 +777,15 @@ def load_graph_data(use_cache=True):
     if use_cache and cached:
         return cached["data"]
 
-    res = api_request("GET", "/graph")
-    if res.status_code != 200:
-        raise RuntimeError(auth_error_message(res))
-    res.encoding = 'utf-8'
-    data = res.json()
+    if use_cache:
+        data = fetch_graph_data_cached(st.session_state.get("access_token") or "")
+    else:
+        fetch_graph_data_cached.clear()
+        res = api_request("GET", "/graph", params={"refresh": True})
+        if res.status_code != 200:
+            raise RuntimeError(auth_error_message(res))
+        res.encoding = 'utf-8'
+        data = res.json()
     st.session_state[cache_key] = {"data": data}
     return data
 
@@ -862,6 +889,165 @@ def render_billing_page():
             f"余额 {item.get('balance_after', 0)} · {created_at}"
         )
 
+ 
+
+def render_admin_page():
+    render_page_header(
+        "后台管理",
+        "用户数据管理",
+        "查看用户数据、调整额度、导出账户记录，必要时删除用户账号和关联数据。",
+    )
+
+    if not st.session_state.current_user.get("is_admin"):
+        st.error("需要管理员权限。")
+        return
+
+    col_status, col_action = st.columns([4, 1])
+    with col_status:
+        st.markdown(
+            '<div class="section-copy">用户列表来自账号数据库。导出内容包含笔记和额度流水，不包含原始音频文件字节。</div>',
+            unsafe_allow_html=True,
+        )
+    with col_action:
+        if st.button("刷新", use_container_width=True):
+            st.session_state.pop("admin_users_cache", None)
+            st.session_state.pop("admin_user_detail", None)
+
+    users_payload = st.session_state.get("admin_users_cache")
+    if users_payload is None:
+        with st.spinner("正在加载用户..."):
+            res = api_request("GET", "/admin/users", timeout=60)
+            if res.status_code != 200:
+                st.error(f"加载用户失败：{auth_error_message(res)}")
+                return
+            users_payload = res.json()
+            st.session_state.admin_users_cache = users_payload
+
+    users = users_payload.get("users", [])
+    if not users:
+        st.info("暂无用户。")
+        return
+
+    table_rows = [
+        {
+            "邮箱": user.get("email"),
+            "用户ID": user.get("id"),
+            "笔记数": user.get("note_count", 0),
+            "当前额度": user.get("balance"),
+            "累计消耗": user.get("total_spent"),
+            "管理员": user.get("is_admin", False),
+            "创建时间": str(user.get("created_at", ""))[:19].replace("T", " "),
+        }
+        for user in users
+    ]
+    st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+    user_options = {f"{user.get('email')} ({user.get('id')[:8]})": user.get("id") for user in users}
+    selected_label = st.selectbox("选择用户", options=list(user_options.keys()))
+    selected_user_id = user_options[selected_label]
+
+    if st.button("加载用户详情", type="primary", use_container_width=True):
+        with st.spinner("正在加载用户详情..."):
+            res = api_request("GET", f"/admin/users/{selected_user_id}", timeout=60)
+            if res.status_code == 200:
+                st.session_state.admin_user_detail = res.json()
+            else:
+                st.error(f"加载详情失败：{auth_error_message(res)}")
+
+    detail = st.session_state.get("admin_user_detail")
+    if not detail or detail.get("user", {}).get("id") != selected_user_id:
+        return
+
+    user = detail.get("user", {})
+    notes = detail.get("notes", [])
+    billing = detail.get("billing", {})
+    account = billing.get("account") or {}
+    transactions = billing.get("transactions", [])
+
+    st.markdown("### 用户概览")
+    col_email, col_notes, col_balance = st.columns(3)
+    col_email.metric("邮箱", user.get("email", ""))
+    col_notes.metric("笔记数", len(notes))
+    col_balance.metric("当前额度", account.get("balance", 0))
+
+    with st.form(f"credit_form_{selected_user_id}"):
+        st.markdown("### 修改额度")
+        new_balance = st.number_input(
+            "设置新的当前额度",
+            min_value=0,
+            value=int(account.get("balance", 0) or 0),
+            step=1,
+        )
+        reason = st.text_input("调整原因", value="管理员调整额度")
+        submitted = st.form_submit_button("保存额度修改", type="primary", use_container_width=True)
+        if submitted:
+            res = api_request(
+                "PATCH",
+                f"/admin/users/{selected_user_id}/credits",
+                json={"balance": int(new_balance), "reason": reason},
+                timeout=30,
+            )
+            if res.status_code == 200:
+                st.success("额度已更新。")
+                detail_res = api_request("GET", f"/admin/users/{selected_user_id}", timeout=60)
+                if detail_res.status_code == 200:
+                    st.session_state.admin_user_detail = detail_res.json()
+                st.session_state.pop("admin_users_cache", None)
+                st.rerun()
+            else:
+                st.error(f"额度更新失败：{auth_error_message(res)}")
+
+    st.download_button(
+        "下载用户数据导出",
+        data=json.dumps(detail, ensure_ascii=False, indent=2),
+        file_name=f"flashofthought-user-{selected_user_id}.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+
+    with st.expander("额度流水", expanded=False):
+        if transactions:
+            st.dataframe(transactions, use_container_width=True, hide_index=True)
+        else:
+            st.info("暂无额度流水。")
+
+    with st.expander("笔记", expanded=False):
+        if notes:
+            for note in notes:
+                meta = note.get("metadata", {})
+                st.markdown(f"**{meta.get('title', '无标题')}**")
+                st.caption(f"{note.get('id')} | {meta.get('created_at', '')}")
+                st.write(meta.get("summary", ""))
+        else:
+            st.info("暂无笔记。")
+
+    st.markdown("### 删除账号")
+    st.warning("删除后会移除该用户账号、笔记、额度数据和已存储的音频文件。这个操作不能撤销。")
+    confirm_email = st.text_input(
+        f"输入用户邮箱确认：{user.get('email', '')}",
+        key=f"delete_email_confirm_{selected_user_id}",
+    )
+    confirm_delete = st.text_input(
+        "再输入 DELETE 启用删除按钮。",
+        key=f"delete_confirm_{selected_user_id}",
+    )
+    delete_disabled = (
+        confirm_email != user.get("email", "")
+        or confirm_delete != "DELETE"
+        or user.get("id") == st.session_state.current_user.get("id")
+    )
+    if user.get("id") == st.session_state.current_user.get("id"):
+        st.caption("不能在这里删除当前登录的管理员账号。")
+    if st.button("永久删除账号和关联数据", disabled=delete_disabled, use_container_width=True):
+        res = api_request("DELETE", f"/admin/users/{selected_user_id}", timeout=60)
+        if res.status_code == 200:
+            st.success("用户数据已删除。")
+            st.session_state.pop("admin_users_cache", None)
+            st.session_state.pop("admin_user_detail", None)
+            st.rerun()
+        else:
+            st.error(f"删除失败：{auth_error_message(res)}")
+
 
 initialize_auth_state()
 restore_auth_state_from_cookie()
@@ -875,6 +1061,8 @@ if not st.session_state.current_user:
 with st.sidebar:
     sidebar_balance = None
     cached_account = get_cached_billing_account()
+    if not cached_account:
+        cached_account = refresh_billing_account_silently()
     if cached_account:
         sidebar_balance = cached_account.get("balance")
 
@@ -897,6 +1085,8 @@ with st.sidebar:
         "knowledge_graph": "🕸️ 知识图谱",
         "billing": "💳 额度管理",
     }
+    if st.session_state.current_user.get("is_admin"):
+        page_options["admin"] = "🛠️ 后台管理"
     page_selection = st.radio(
         "选择模式", 
         options=list(page_options.keys()), 
@@ -910,20 +1100,41 @@ with st.sidebar:
         clear_auth_state(reload_page=True)
         st.stop()
 
+def get_audio_payload_and_signature(audio_data):
+    if hasattr(audio_data, "seek"):
+        audio_data.seek(0)
+    if hasattr(audio_data, "getvalue"):
+        payload = audio_data.getvalue()
+    else:
+        payload = audio_data.read()
+    if hasattr(audio_data, "seek"):
+        audio_data.seek(0)
+    return payload, hashlib.sha256(payload).hexdigest()
+
+
 def process_audio(audio_data, file_name, file_type="audio/mp3"):
     """
     Handle audio processing: Upload -> Transcribe -> Structure -> Display
     """
     with st.spinner("🚀 正在上传并转写音频..."):
         try:
+            payload, audio_signature = get_audio_payload_and_signature(audio_data)
+            processed_signatures = st.session_state.setdefault("processed_audio_signatures", set())
+            if audio_signature in processed_signatures:
+                st.warning("这段音频已经处理过，避免重复扣额度。需要重新处理请重新选择文件或重新录音。")
+                return
+
             # 1. Upload
-            files = {"file": (file_name, audio_data, file_type)}
+            files = {"file": (file_name, payload, file_type)}
             upload_res = api_request("POST", "/upload", files=files)
             
             if upload_res.status_code == 200:
                 upload_data = upload_res.json()
                 raw_text = upload_data.get("raw_text", "")
                 file_url = upload_data.get("file_url", "")
+                if not raw_text.strip():
+                    st.error("转写结果为空，请重录或上传更清晰的音频")
+                    return
                 
                 st.toast("✅ 转写完成!", icon="🎉")
                 
@@ -939,6 +1150,7 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                         st.session_state.current_note = process_res.json()
                         st.session_state.current_raw_text = raw_text
                         st.session_state.current_file_url = file_url
+                        processed_signatures.add(audio_signature)
                         st.rerun()
                     else:
                         st.error(f"整理失败: {auth_error_message(process_res)}")
@@ -1063,6 +1275,7 @@ def display_note():
                     }
                     save_res = api_request("POST", "/save", json=save_payload)
                     if save_res.status_code == 200:
+                        refresh_billing_account_silently()
                         invalidate_notes_cache()
                         st.balloons()
                         st.toast("保存成功!", icon="💾")
@@ -1079,13 +1292,22 @@ def display_note():
     
     with col_clear:
         if st.button("🗑️ 放弃并清除", use_container_width=False):
-            st.session_state.current_note = None
-            st.session_state.current_raw_text = ""
-            st.session_state.current_file_url = ""
-            st.rerun()
+            with st.spinner("Discarding..."):
+                discard_res = api_request("POST", "/discard", json={"source_url": file_url})
+                if discard_res.status_code == 200:
+                    refresh_billing_account_silently()
+                    st.session_state.current_note = None
+                    st.session_state.current_raw_text = ""
+                    st.session_state.current_file_url = ""
+                    st.rerun()
+                else:
+                    st.error(f"Discard failed: {auth_error_message(discard_res)}")
 
 if page_selection == "billing":
     render_billing_page()
+
+elif page_selection == "admin":
+    render_admin_page()
 
 elif page_selection == "record_idea":
     render_page_header(
@@ -1360,6 +1582,8 @@ elif page_selection == "knowledge_review":
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["expand"] = result_data
                                                         save_analysis_result(note.get('id'), note, 'expand', result_data, st.session_state.get("access_token"))
+                                                        refresh_billing_account_silently()
+                                                        st.rerun()
                                                     else:
                                                         st.error("扩展失败")
                                                 except Exception as e:
@@ -1377,6 +1601,8 @@ elif page_selection == "knowledge_review":
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["roadmap"] = result_data
                                                         save_analysis_result(note.get('id'), note, 'roadmap', result_data, st.session_state.get("access_token"))
+                                                        refresh_billing_account_silently()
+                                                        st.rerun()
                                                     else:
                                                         st.error("生成失败")
                                                 except Exception as e:
@@ -1394,6 +1620,8 @@ elif page_selection == "knowledge_review":
                                                         result_data = res.json()
                                                         st.session_state[cache_key]["score"] = result_data
                                                         save_analysis_result(note.get('id'), note, 'score', result_data, st.session_state.get("access_token"))
+                                                        refresh_billing_account_silently()
+                                                        st.rerun()
                                                     else:
                                                         st.error("评分失败")
                                                 except Exception as e:
@@ -1636,6 +1864,7 @@ elif page_selection == "knowledge_graph":
     graph_cache = st.session_state.get("graph_data_cache")
     data = graph_cache.get("data") if graph_cache else None
     load_graph_now = data is None and not st.session_state.get("graph_auto_loaded")
+    force_graph_refresh = False
 
     col_graph_status, col_graph_action = st.columns([4, 1])
     with col_graph_status:
@@ -1648,11 +1877,12 @@ elif page_selection == "knowledge_graph":
         if st.button(graph_button_label, use_container_width=True):
             st.session_state.pop("graph_data_cache", None)
             load_graph_now = True
+            force_graph_refresh = True
 
     if load_graph_now:
         with st.spinner("正在构建知识图谱..."):
             try:
-                data = load_graph_data(use_cache=False)
+                data = load_graph_data(use_cache=not force_graph_refresh)
                 st.session_state.graph_auto_loaded = True
             except Exception as e:
                 data = None

@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import os
 from app.api.routes import router as api_router
 from app.api.auth_routes import router as auth_router
+from app.api.admin_routes import router as admin_router
 
 # Load environment variables
 load_dotenv()
@@ -21,6 +22,7 @@ app.mount("/static/uploads", StaticFiles(directory="static/uploads"), name="stat
 # Include API Router
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

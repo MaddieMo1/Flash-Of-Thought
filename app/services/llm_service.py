@@ -28,6 +28,19 @@ class LLMService:
     def __init__(self):
         pass
 
+    def _extract_transcription_text(self, data: Dict[str, Any]) -> str:
+        text_parts = []
+        for transcript in data.get("transcripts", []):
+            transcript_text = str(transcript.get("text", "")).strip()
+            if transcript_text:
+                text_parts.append(transcript_text)
+                continue
+            for sentence in transcript.get("sentences", []):
+                sentence_text = str(sentence.get("text", "")).strip()
+                if sentence_text:
+                    text_parts.append(sentence_text)
+        return "\n".join(text_parts).strip()
+
     def transcribe_audio(self, file_url: str) -> str:
         """
         Transcribe audio from a URL using Qwen/DashScope ASR.
@@ -92,9 +105,7 @@ class LLMService:
                                  resp = requests.get(result['transcription_url'])
                                  if resp.status_code == 200:
                                      data = resp.json()
-                                     if 'transcripts' in data:
-                                         for t in data['transcripts']:
-                                             text += t.get('text', '')
+                                     text += self._extract_transcription_text(data)
                              except Exception as e:
                                  print(f"Error downloading transcription: {e}")
                                  
@@ -102,11 +113,13 @@ class LLMService:
                          elif 'sentences' in result:
                              for sentence in result['sentences']:
                                  text += sentence['text']
-                                 
+                                  
+                     text = text.strip()
+                     if not text:
+                         raise Exception("ASR returned no transcript text")
                      return text
                 else:
-                     # Fallback or empty
-                     return ""
+                     raise Exception("ASR returned no transcription results")
             else:
                 raise Exception(f"ASR Failed: {transcription_response.code} - {transcription_response.message}")
         except Exception as e:
