@@ -889,6 +889,165 @@ def render_billing_page():
             f"余额 {item.get('balance_after', 0)} · {created_at}"
         )
 
+ 
+
+def render_admin_page():
+    render_page_header(
+        "后台管理",
+        "用户数据管理",
+        "查看用户数据、调整额度、导出账户记录，必要时删除用户账号和关联数据。",
+    )
+
+    if not st.session_state.current_user.get("is_admin"):
+        st.error("需要管理员权限。")
+        return
+
+    col_status, col_action = st.columns([4, 1])
+    with col_status:
+        st.markdown(
+            '<div class="section-copy">用户列表来自账号数据库。导出内容包含笔记和额度流水，不包含原始音频文件字节。</div>',
+            unsafe_allow_html=True,
+        )
+    with col_action:
+        if st.button("刷新", use_container_width=True):
+            st.session_state.pop("admin_users_cache", None)
+            st.session_state.pop("admin_user_detail", None)
+
+    users_payload = st.session_state.get("admin_users_cache")
+    if users_payload is None:
+        with st.spinner("正在加载用户..."):
+            res = api_request("GET", "/admin/users", timeout=60)
+            if res.status_code != 200:
+                st.error(f"加载用户失败：{auth_error_message(res)}")
+                return
+            users_payload = res.json()
+            st.session_state.admin_users_cache = users_payload
+
+    users = users_payload.get("users", [])
+    if not users:
+        st.info("暂无用户。")
+        return
+
+    table_rows = [
+        {
+            "邮箱": user.get("email"),
+            "用户ID": user.get("id"),
+            "笔记数": user.get("note_count", 0),
+            "当前额度": user.get("balance"),
+            "累计消耗": user.get("total_spent"),
+            "管理员": user.get("is_admin", False),
+            "创建时间": str(user.get("created_at", ""))[:19].replace("T", " "),
+        }
+        for user in users
+    ]
+    st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+    user_options = {f"{user.get('email')} ({user.get('id')[:8]})": user.get("id") for user in users}
+    selected_label = st.selectbox("选择用户", options=list(user_options.keys()))
+    selected_user_id = user_options[selected_label]
+
+    if st.button("加载用户详情", type="primary", use_container_width=True):
+        with st.spinner("正在加载用户详情..."):
+            res = api_request("GET", f"/admin/users/{selected_user_id}", timeout=60)
+            if res.status_code == 200:
+                st.session_state.admin_user_detail = res.json()
+            else:
+                st.error(f"加载详情失败：{auth_error_message(res)}")
+
+    detail = st.session_state.get("admin_user_detail")
+    if not detail or detail.get("user", {}).get("id") != selected_user_id:
+        return
+
+    user = detail.get("user", {})
+    notes = detail.get("notes", [])
+    billing = detail.get("billing", {})
+    account = billing.get("account") or {}
+    transactions = billing.get("transactions", [])
+
+    st.markdown("### 用户概览")
+    col_email, col_notes, col_balance = st.columns(3)
+    col_email.metric("邮箱", user.get("email", ""))
+    col_notes.metric("笔记数", len(notes))
+    col_balance.metric("当前额度", account.get("balance", 0))
+
+    with st.form(f"credit_form_{selected_user_id}"):
+        st.markdown("### 修改额度")
+        new_balance = st.number_input(
+            "设置新的当前额度",
+            min_value=0,
+            value=int(account.get("balance", 0) or 0),
+            step=1,
+        )
+        reason = st.text_input("调整原因", value="管理员调整额度")
+        submitted = st.form_submit_button("保存额度修改", type="primary", use_container_width=True)
+        if submitted:
+            res = api_request(
+                "PATCH",
+                f"/admin/users/{selected_user_id}/credits",
+                json={"balance": int(new_balance), "reason": reason},
+                timeout=30,
+            )
+            if res.status_code == 200:
+                st.success("额度已更新。")
+                detail_res = api_request("GET", f"/admin/users/{selected_user_id}", timeout=60)
+                if detail_res.status_code == 200:
+                    st.session_state.admin_user_detail = detail_res.json()
+                st.session_state.pop("admin_users_cache", None)
+                st.rerun()
+            else:
+                st.error(f"额度更新失败：{auth_error_message(res)}")
+
+    st.download_button(
+        "下载用户数据导出",
+        data=json.dumps(detail, ensure_ascii=False, indent=2),
+        file_name=f"flashofthought-user-{selected_user_id}.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+
+    with st.expander("额度流水", expanded=False):
+        if transactions:
+            st.dataframe(transactions, use_container_width=True, hide_index=True)
+        else:
+            st.info("暂无额度流水。")
+
+    with st.expander("笔记", expanded=False):
+        if notes:
+            for note in notes:
+                meta = note.get("metadata", {})
+                st.markdown(f"**{meta.get('title', '无标题')}**")
+                st.caption(f"{note.get('id')} | {meta.get('created_at', '')}")
+                st.write(meta.get("summary", ""))
+        else:
+            st.info("暂无笔记。")
+
+    st.markdown("### 删除账号")
+    st.warning("删除后会移除该用户账号、笔记、额度数据和已存储的音频文件。这个操作不能撤销。")
+    confirm_email = st.text_input(
+        f"输入用户邮箱确认：{user.get('email', '')}",
+        key=f"delete_email_confirm_{selected_user_id}",
+    )
+    confirm_delete = st.text_input(
+        "再输入 DELETE 启用删除按钮。",
+        key=f"delete_confirm_{selected_user_id}",
+    )
+    delete_disabled = (
+        confirm_email != user.get("email", "")
+        or confirm_delete != "DELETE"
+        or user.get("id") == st.session_state.current_user.get("id")
+    )
+    if user.get("id") == st.session_state.current_user.get("id"):
+        st.caption("不能在这里删除当前登录的管理员账号。")
+    if st.button("永久删除账号和关联数据", disabled=delete_disabled, use_container_width=True):
+        res = api_request("DELETE", f"/admin/users/{selected_user_id}", timeout=60)
+        if res.status_code == 200:
+            st.success("用户数据已删除。")
+            st.session_state.pop("admin_users_cache", None)
+            st.session_state.pop("admin_user_detail", None)
+            st.rerun()
+        else:
+            st.error(f"删除失败：{auth_error_message(res)}")
+
 
 initialize_auth_state()
 restore_auth_state_from_cookie()
@@ -926,6 +1085,8 @@ with st.sidebar:
         "knowledge_graph": "🕸️ 知识图谱",
         "billing": "💳 额度管理",
     }
+    if st.session_state.current_user.get("is_admin"):
+        page_options["admin"] = "🛠️ 后台管理"
     page_selection = st.radio(
         "选择模式", 
         options=list(page_options.keys()), 
@@ -1144,6 +1305,9 @@ def display_note():
 
 if page_selection == "billing":
     render_billing_page()
+
+elif page_selection == "admin":
+    render_admin_page()
 
 elif page_selection == "record_idea":
     render_page_header(

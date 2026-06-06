@@ -133,6 +133,27 @@ class AuthService:
             ).fetchone()
         return dict(row) if row else None
 
+    def list_users(self) -> list[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, email, created_at FROM users ORDER BY created_at DESC"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_user(self, user_id: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            conn.commit()
+        return cursor.rowcount > 0
+
+    def is_admin(self, user: Dict[str, Any]) -> bool:
+        admin_emails = {
+            item.strip().lower()
+            for item in get_settings().ADMIN_EMAILS.split(",")
+            if item.strip()
+        }
+        return self.normalize_email(user.get("email", "")) in admin_emails
+
     def create_access_token(self, user: Dict[str, Any]) -> str:
         now = int(time.time())
         payload = {
@@ -160,6 +181,7 @@ class AuthService:
             "id": user["id"],
             "email": user["email"],
             "created_at": user["created_at"],
+            "is_admin": self.is_admin(user),
         }
 
     def _encode_jwt(self, payload: Dict[str, Any]) -> str:

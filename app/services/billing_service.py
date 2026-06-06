@@ -181,6 +181,103 @@ class BillingService:
             "recent_transactions": [dict(row) for row in transactions],
         }
 
+    def get_account_snapshot(self, user_id: str) -> Dict[str, Any]:
+        with self._connect() as conn:
+            account = conn.execute(
+                "SELECT * FROM user_credits WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+            transactions = conn.execute(
+                """
+                SELECT type, amount, balance_after, description, reference_id, created_at
+                FROM credit_transactions
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+            payments = conn.execute(
+                """
+                SELECT id, plan_id, plan_name, amount_cents, currency, credits, status, created_at, paid_at
+                FROM payment_orders
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+
+        return {
+            "account": dict(account) if account else None,
+            "transactions": [dict(row) for row in transactions],
+            "payments": [dict(row) for row in payments],
+        }
+
+    def delete_user_data(self, user_id: str) -> Dict[str, int]:
+        with self._connect() as conn:
+            payment_count = conn.execute(
+                "DELETE FROM payment_orders WHERE user_id = ?",
+                (user_id,),
+            ).rowcount
+            transaction_count = conn.execute(
+                "DELETE FROM credit_transactions WHERE user_id = ?",
+                (user_id,),
+            ).rowcount
+            account_count = conn.execute(
+                "DELETE FROM user_credits WHERE user_id = ?",
+                (user_id,),
+            ).rowcount
+            conn.commit()
+        return {
+            "accounts": account_count,
+            "transactions": transaction_count,
+            "payments": payment_count,
+        }
+
+    def set_balance(self, user_id: str, balance: int, description: str) -> Dict[str, Any]:
+        if balance < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Balance cannot be negative",
+            )
+
+        with self._connect() as conn:
+            account = self._ensure_account(conn, user_id)
+            old_balance = int(account["balance"])
+            delta = balance - old_balance
+            if delta == 0:
+                return {"balance": old_balance, "delta": 0}
+
+            if delta > 0:
+                total_purchased_change = delta
+                total_spent_change = 0
+            else:
+                total_purchased_change = 0
+                total_spent_change = abs(delta)
+
+            conn.execute(
+                """
+                UPDATE user_credits
+                SET balance = ?,
+                    total_purchased = total_purchased + ?,
+                    total_spent = total_spent + ?,
+                    updated_at = ?
+                WHERE user_id = ?
+                """,
+                (balance, total_purchased_change, total_spent_change, self._now(), user_id),
+            )
+            self._record_transaction(
+                conn,
+                user_id=user_id,
+                transaction_type="admin_adjust",
+                amount=delta,
+                balance_after=balance,
+                description=description,
+                reference_id=None,
+            )
+            conn.commit()
+
+        return {"balance": balance, "delta": delta}
+
     def spend_credits(self, user_id: str, amount: int, description: str) -> Dict[str, Any]:
         if amount <= 0:
             raise ValueError("amount must be positive")

@@ -274,6 +274,25 @@ class RagService:
                 self._persist_mock_db()
         return True
 
+    def delete_user_notes(self, user_id: str) -> int:
+        if CHROMADB_AVAILABLE:
+            existing = self.collection.get(where={"user_id": user_id})
+            note_ids = existing.get("ids", [])
+            if note_ids:
+                self.collection.delete(ids=note_ids)
+            return len(note_ids)
+
+        note_ids = [
+            note_id
+            for note_id, data in self.mock_db.items()
+            if data.get("metadata", {}).get("user_id") == user_id
+        ]
+        for note_id in note_ids:
+            del self.mock_db[note_id]
+        if note_ids:
+            self._persist_mock_db()
+        return len(note_ids)
+
     def update_note(self, note_id: str, note_data: Dict[str, Any], raw_text: str = None, user_id: Optional[str] = None):
         """
         Update a note. We delete and re-add it (or update in place).

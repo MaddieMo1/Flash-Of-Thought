@@ -1,4 +1,5 @@
 import os
+import shutil
 import time
 import uuid
 from urllib.parse import urlparse
@@ -83,6 +84,26 @@ class OssService:
             return f"{settings.OSS_PUBLIC_BASE_URL}/{object_key}"
         endpoint_host = (self.oss_endpoint or settings.OSS_ENDPOINT).replace("https://", "").replace("http://", "")
         return f"https://{settings.OSS_BUCKET_AUDIO}.{endpoint_host}/{object_key}"
+
+    def delete_user_files(self, user_id: str) -> int:
+        prefix = f"audio/{user_id}/"
+        if self.mode == 'oss':
+            deleted_count = 0
+            for obj in oss2.ObjectIterator(self.bucket, prefix=prefix):
+                self.bucket.delete_object(obj.key)
+                deleted_count += 1
+            return deleted_count
+
+        user_path = os.path.abspath(os.path.join(self.local_storage_path, "audio", user_id))
+        storage_root = os.path.abspath(self.local_storage_path)
+        if not user_path.startswith(storage_root + os.sep) or not os.path.isdir(user_path):
+            return 0
+
+        deleted_count = 0
+        for _, _, files in os.walk(user_path):
+            deleted_count += len(files)
+        shutil.rmtree(user_path)
+        return deleted_count
 
 # Singleton instance
 oss_service = OssService()
