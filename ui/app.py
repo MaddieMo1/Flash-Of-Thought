@@ -4,6 +4,7 @@ import json
 import os
 import time
 import hashlib
+import html
 import plotly.graph_objects as go
 import networkx as nx
 import pandas as pd
@@ -524,6 +525,300 @@ st.markdown("""
         font-size: 0.86rem;
         line-height: 1.5;
     }
+    .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.8rem;
+        margin: 0.9rem 0 1.2rem;
+    }
+    .metric-card {
+        min-height: 5.2rem;
+        padding: 0.9rem 1rem;
+        border-radius: 12px;
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.82), rgba(18, 22, 30, 0.72));
+        border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .metric-card.primary {
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.16), rgba(20, 184, 166, 0.08));
+        border-color: rgba(0, 212, 255, 0.28);
+    }
+    .metric-card span {
+        display: block;
+        color: #94A3B8;
+        font-size: 0.78rem;
+        font-weight: 750;
+        margin-bottom: 0.35rem;
+    }
+    .metric-card strong {
+        color: #F8FAFC;
+        font-size: 1.35rem;
+        font-weight: 850;
+    }
+    .metric-card small {
+        display: block;
+        color: #64748B;
+        margin-top: 0.35rem;
+        font-size: 0.76rem;
+        line-height: 1.4;
+    }
+    .tool-card {
+        min-height: 7.4rem;
+        padding: 1rem;
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.58);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .tool-card strong {
+        display: block;
+        color: #F8FAFC;
+        font-size: 1rem;
+        margin-bottom: 0.35rem;
+    }
+    .tool-card span {
+        color: #94A3B8;
+        font-size: 0.86rem;
+        line-height: 1.55;
+    }
+    .empty-panel {
+        padding: 1rem;
+        border-radius: 12px;
+        color: #94A3B8;
+        background: rgba(15, 23, 42, 0.56);
+        border: 1px dashed rgba(148, 163, 184, 0.24);
+    }
+    .note-list-row {
+        padding: 0.85rem 0.95rem;
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.58);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        margin-bottom: 0.55rem;
+    }
+    .note-list-row.active {
+        border-color: rgba(0, 212, 255, 0.45);
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.13), rgba(15, 23, 42, 0.62));
+    }
+    .note-row-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.7rem;
+        margin-bottom: 0.3rem;
+    }
+    .note-row-title {
+        color: #F8FAFC;
+        font-weight: 850;
+        line-height: 1.35;
+    }
+    .note-row-time {
+        color: #64748B;
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }
+    .note-row-summary {
+        color: #94A3B8;
+        font-size: 0.86rem;
+        line-height: 1.55;
+        margin-bottom: 0.5rem;
+    }
+    .note-row-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+    }
+    .note-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.18rem 0.45rem;
+        border-radius: 999px;
+        color: #BAE6FD;
+        background: rgba(14, 165, 233, 0.11);
+        border: 1px solid rgba(14, 165, 233, 0.18);
+        font-size: 0.74rem;
+        font-weight: 700;
+    }
+    .analysis-chip {
+        color: #C4B5FD;
+        background: rgba(124, 58, 237, 0.13);
+        border-color: rgba(124, 58, 237, 0.22);
+    }
+    .transaction-row {
+        display: grid;
+        grid-template-columns: 7rem 1fr 7rem 10rem;
+        gap: 0.8rem;
+        align-items: center;
+        padding: 0.75rem 0.85rem;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.48);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        margin-bottom: 0.45rem;
+    }
+    .transaction-amount {
+        font-weight: 850;
+    }
+    .transaction-amount.positive {
+        color: #86EFAC;
+    }
+    .transaction-amount.negative {
+        color: #FDA4AF;
+    }
+    .transaction-meta {
+        color: #94A3B8;
+        font-size: 0.82rem;
+    }
+    div[data-testid="stFileUploader"] section {
+        border-radius: 14px;
+        border: 1px dashed rgba(0, 212, 255, 0.28);
+        background: rgba(0, 212, 255, 0.05);
+    }
+    div[data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .admin-status-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.8rem;
+        margin: 0.85rem 0 1.15rem;
+    }
+    .admin-status {
+        min-height: 5.4rem;
+        padding: 0.85rem 0.95rem;
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.78);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    .admin-status span {
+        display: block;
+        color: #94A3B8;
+        font-size: 0.78rem;
+        font-weight: 700;
+        margin-bottom: 0.4rem;
+    }
+    .admin-status strong {
+        color: #F8FAFC;
+        font-size: 1.28rem;
+        font-weight: 850;
+    }
+    .admin-status.accent {
+        background: linear-gradient(135deg, rgba(0, 212, 255, 0.14), rgba(20, 184, 166, 0.08));
+        border-color: rgba(0, 212, 255, 0.28);
+    }
+    .admin-panel {
+        margin: 1rem 0;
+        padding: 1rem;
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .admin-panel-title {
+        color: #F8FAFC;
+        font-size: 1rem;
+        font-weight: 850;
+        margin-bottom: 0.2rem;
+    }
+    .admin-panel-copy {
+        color: #94A3B8;
+        font-size: 0.86rem;
+        line-height: 1.55;
+    }
+    .admin-user-chip {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        margin: 0.25rem 0 0.8rem;
+        padding: 0.45rem 0.7rem;
+        border-radius: 999px;
+        color: #CFFAFE;
+        background: rgba(0, 212, 255, 0.09);
+        border: 1px solid rgba(0, 212, 255, 0.22);
+        font-size: 0.84rem;
+        font-weight: 750;
+    }
+    .danger-panel {
+        margin-top: 0.75rem;
+        padding: 1rem;
+        border-radius: 12px;
+        background: rgba(127, 29, 29, 0.24);
+        border: 1px solid rgba(248, 113, 113, 0.35);
+    }
+    .danger-panel strong {
+        color: #FEE2E2;
+    }
+    .graph-legend {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0.4rem 0 1rem;
+    }
+    .graph-legend-item {
+        display: flex;
+        gap: 0.55rem;
+        align-items: flex-start;
+        padding: 0.75rem 0.85rem;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        color: #94A3B8;
+        font-size: 0.84rem;
+        line-height: 1.45;
+    }
+    .graph-dot {
+        width: 0.72rem;
+        height: 0.72rem;
+        flex: 0 0 0.72rem;
+        margin-top: 0.2rem;
+        border-radius: 999px;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+    }
+    .graph-dot.core { background: #00D4FF; }
+    .graph-dot.note { background: #7C3AED; }
+    .graph-dot.tag { background: #22C55E; }
+    @media (max-width: 900px) {
+        .admin-status-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .metric-grid,
+        .capture-strip {
+            grid-template-columns: 1fr;
+        }
+        .transaction-row {
+            grid-template-columns: 1fr;
+        }
+    }
+    @media (max-width: 640px) {
+        .main .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        .page-title {
+            font-size: 2rem;
+            line-height: 1.12;
+        }
+        .metric-grid,
+        .admin-status-grid,
+        .graph-legend {
+            grid-template-columns: 1fr !important;
+        }
+        .metric-card,
+        .tool-card,
+        .admin-status,
+        .plan-card {
+            min-height: auto;
+        }
+        .transaction-row {
+            gap: 0.35rem;
+        }
+        .note-row-top {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .note-row-time {
+            white-space: normal;
+        }
+    }
 
     footer {visibility: hidden;}
 </style>
@@ -803,6 +1098,36 @@ def render_page_header(kicker, title, copy):
     )
 
 
+def render_metric_grid(items, columns=3):
+    cells = []
+    for idx, item in enumerate(items):
+        variant = " primary" if idx == 0 else ""
+        note = f"<small>{item.get('note', '')}</small>" if item.get("note") else ""
+        cells.append(
+            f'<div class="metric-card{variant}">'
+            f'<span>{item.get("label", "")}</span>'
+            f'<strong>{item.get("value", "")}</strong>'
+            f'{note}'
+            f'</div>'
+        )
+    st.markdown(
+        f'<div class="metric-grid" style="grid-template-columns: repeat({columns}, minmax(0, 1fr));">{"".join(cells)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_tool_cards(items):
+    cells = []
+    for item in items:
+        cells.append(
+            f'<div class="tool-card">'
+            f'<strong>{item.get("title", "")}</strong>'
+            f'<span>{item.get("copy", "")}</span>'
+            f'</div>'
+        )
+    st.markdown(f'<div class="capture-strip">{"".join(cells)}</div>', unsafe_allow_html=True)
+
+
 def render_billing_page():
     render_page_header(
         "Account",
@@ -845,10 +1170,11 @@ def render_billing_page():
         st.info("点击“加载额度”后查看余额、套餐和最近流水。")
         return
 
-    col_balance, col_purchased, col_spent = st.columns(3)
-    col_balance.metric("当前余额", f"{account.get('balance', 0)} 点")
-    col_purchased.metric("累计充值", f"{account.get('total_purchased', 0)} 点")
-    col_spent.metric("累计消耗", f"{account.get('total_spent', 0)} 点")
+    render_metric_grid([
+        {"label": "当前余额", "value": f"{account.get('balance', 0)} 点", "note": "用于录入、分析、问答和周报"},
+        {"label": "累计充值", "value": f"{account.get('total_purchased', 0)} 点", "note": "包含模拟支付和后台调整"},
+        {"label": "累计消耗", "value": f"{account.get('total_spent', 0)} 点", "note": "记录所有扣费操作"},
+    ])
 
     st.markdown("### 充值套餐")
     plan_cols = st.columns(len(plans) or 1)
@@ -877,16 +1203,22 @@ def render_billing_page():
     st.markdown("### 最近流水")
     transactions = account.get("recent_transactions", [])
     if not transactions:
-        st.info("暂无流水")
+        st.markdown('<div class="empty-panel">暂无流水。完成录入、分析或充值后会显示最近记录。</div>', unsafe_allow_html=True)
         return
 
     for item in transactions:
         amount = int(item.get("amount", 0))
         amount_text = f"+{amount}" if amount > 0 else str(amount)
+        amount_class = "positive" if amount > 0 else "negative"
         created_at = item.get("created_at", "")[:19].replace("T", " ")
-        st.write(
-            f"**{amount_text} 点** · {item.get('description', '')}  "
-            f"余额 {item.get('balance_after', 0)} · {created_at}"
+        st.markdown(
+            f'<div class="transaction-row">'
+            f'<div class="transaction-amount {amount_class}">{amount_text} 点</div>'
+            f'<div>{item.get("description", "")}</div>'
+            f'<div class="transaction-meta">余额 {item.get("balance_after", 0)}</div>'
+            f'<div class="transaction-meta">{created_at}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
         )
 
  
@@ -895,21 +1227,21 @@ def render_admin_page():
     render_page_header(
         "后台管理",
         "用户数据管理",
-        "查看用户数据、调整额度、导出账户记录，必要时删除用户账号和关联数据。",
+        "面向运营维护的控制台：快速定位用户、调整额度、导出记录，并用双确认保护删除操作。",
     )
 
     if not st.session_state.current_user.get("is_admin"):
         st.error("需要管理员权限。")
         return
 
-    col_status, col_action = st.columns([4, 1])
-    with col_status:
+    top_left, top_right = st.columns([5, 1])
+    with top_left:
         st.markdown(
-            '<div class="section-copy">用户列表来自账号数据库。导出内容包含笔记和额度流水，不包含原始音频文件字节。</div>',
+            '<div class="section-copy">用户列表来自账号数据库。导出内容包含笔记、额度账户和交易流水，不包含原始音频文件字节。</div>',
             unsafe_allow_html=True,
         )
-    with col_action:
-        if st.button("刷新", use_container_width=True):
+    with top_right:
+        if st.button("刷新数据", use_container_width=True):
             st.session_state.pop("admin_users_cache", None)
             st.session_state.pop("admin_user_detail", None)
 
@@ -928,6 +1260,35 @@ def render_admin_page():
         st.info("暂无用户。")
         return
 
+    total_notes = sum(int(user.get("note_count") or 0) for user in users)
+    total_balance = sum(int(user.get("balance") or 0) for user in users)
+    admin_count = sum(1 for user in users if user.get("is_admin"))
+    st.markdown(
+        f"""
+        <div class="admin-status-grid">
+            <div class="admin-status accent"><span>用户总数</span><strong>{len(users)}</strong></div>
+            <div class="admin-status"><span>管理员</span><strong>{admin_count}</strong></div>
+            <div class="admin-status"><span>笔记总数</span><strong>{total_notes}</strong></div>
+            <div class="admin-status"><span>剩余额度</span><strong>{total_balance}</strong></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    search_text = st.text_input("搜索用户", placeholder="输入邮箱或用户 ID", key="admin_user_search")
+    visible_users = users
+    if search_text.strip():
+        keyword = search_text.strip().lower()
+        visible_users = [
+            user for user in users
+            if keyword in str(user.get("email", "")).lower()
+            or keyword in str(user.get("id", "")).lower()
+        ]
+
+    if not visible_users:
+        st.info("没有匹配的用户。")
+        return
+
     table_rows = [
         {
             "邮箱": user.get("email"),
@@ -938,15 +1299,26 @@ def render_admin_page():
             "管理员": user.get("is_admin", False),
             "创建时间": str(user.get("created_at", ""))[:19].replace("T", " "),
         }
-        for user in users
+        for user in visible_users
     ]
     st.dataframe(table_rows, use_container_width=True, hide_index=True)
 
-    user_options = {f"{user.get('email')} ({user.get('id')[:8]})": user.get("id") for user in users}
+    st.markdown(
+        '<div class="admin-panel"><div class="admin-panel-title">选择用户</div>'
+        '<div class="admin-panel-copy">先加载详情，再进行额度修改、数据导出或删除账号。</div></div>',
+        unsafe_allow_html=True,
+    )
+    user_options = {f"{user.get('email')} ({user.get('id')[:8]})": user.get("id") for user in visible_users}
     selected_label = st.selectbox("选择用户", options=list(user_options.keys()))
     selected_user_id = user_options[selected_label]
 
-    if st.button("加载用户详情", type="primary", use_container_width=True):
+    load_col, hint_col = st.columns([1, 3])
+    with load_col:
+        load_clicked = st.button("加载详情", type="primary", use_container_width=True)
+    with hint_col:
+        st.caption("详情不会自动切换，避免误操作到刚刚搜索出来的其他用户。")
+
+    if load_clicked:
         with st.spinner("正在加载用户详情..."):
             res = api_request("GET", f"/admin/users/{selected_user_id}", timeout=60)
             if res.status_code == 200:
@@ -963,90 +1335,115 @@ def render_admin_page():
     billing = detail.get("billing", {})
     account = billing.get("account") or {}
     transactions = billing.get("transactions", [])
+    payments = billing.get("payments", [])
+    audio_file_count = sum(
+        1 for note in notes
+        if (note.get("metadata") or {}).get("source_url")
+    )
 
-    st.markdown("### 用户概览")
+    st.markdown(f'<div class="admin-user-chip">当前操作用户 · {user.get("email", "")}</div>', unsafe_allow_html=True)
     col_email, col_notes, col_balance = st.columns(3)
     col_email.metric("邮箱", user.get("email", ""))
     col_notes.metric("笔记数", len(notes))
     col_balance.metric("当前额度", account.get("balance", 0))
 
-    with st.form(f"credit_form_{selected_user_id}"):
-        st.markdown("### 修改额度")
-        new_balance = st.number_input(
-            "设置新的当前额度",
-            min_value=0,
-            value=int(account.get("balance", 0) or 0),
-            step=1,
+    tab_account, tab_records, tab_danger = st.tabs(["账户操作", "数据记录", "危险操作"])
+
+    with tab_account:
+        st.markdown(
+            '<div class="admin-panel"><div class="admin-panel-title">额度调整</div>'
+            '<div class="admin-panel-copy">设置用户新的当前额度，系统会自动写入 admin_adjust 流水，便于之后追踪。</div></div>',
+            unsafe_allow_html=True,
         )
-        reason = st.text_input("调整原因", value="管理员调整额度")
-        submitted = st.form_submit_button("保存额度修改", type="primary", use_container_width=True)
-        if submitted:
-            res = api_request(
-                "PATCH",
-                f"/admin/users/{selected_user_id}/credits",
-                json={"balance": int(new_balance), "reason": reason},
-                timeout=30,
-            )
+        with st.form(f"credit_form_{selected_user_id}"):
+            col_balance_input, col_reason = st.columns([1, 2])
+            with col_balance_input:
+                new_balance = st.number_input(
+                    "新的当前额度",
+                    min_value=0,
+                    value=int(account.get("balance", 0) or 0),
+                    step=1,
+                )
+            with col_reason:
+                reason = st.text_input("调整原因", value="管理员调整额度")
+            submitted = st.form_submit_button("保存额度修改", type="primary", use_container_width=True)
+            if submitted:
+                res = api_request(
+                    "PATCH",
+                    f"/admin/users/{selected_user_id}/credits",
+                    json={"balance": int(new_balance), "reason": reason},
+                    timeout=30,
+                )
+                if res.status_code == 200:
+                    st.success("额度已更新。")
+                    detail_res = api_request("GET", f"/admin/users/{selected_user_id}", timeout=60)
+                    if detail_res.status_code == 200:
+                        st.session_state.admin_user_detail = detail_res.json()
+                    st.session_state.pop("admin_users_cache", None)
+                    st.rerun()
+                else:
+                    st.error(f"额度更新失败：{auth_error_message(res)}")
+
+        st.download_button(
+            "下载用户数据导出",
+            data=json.dumps(detail, ensure_ascii=False, indent=2),
+            file_name=f"flashofthought-user-{selected_user_id}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    with tab_records:
+        with st.expander("额度流水", expanded=True):
+            if transactions:
+                st.dataframe(transactions, use_container_width=True, hide_index=True)
+            else:
+                st.info("暂无额度流水。")
+
+        with st.expander("笔记", expanded=False):
+            if notes:
+                for note in notes:
+                    meta = note.get("metadata", {})
+                    st.markdown(f"**{meta.get('title', '无标题')}**")
+                    st.caption(f"{note.get('id')} | {meta.get('created_at', '')}")
+                    st.write(meta.get("summary", ""))
+            else:
+                st.info("暂无笔记。")
+
+    with tab_danger:
+        st.markdown(
+            '<div class="danger-panel"><strong>永久删除账号</strong>'
+            '<div class="admin-panel-copy">删除后会移除该用户账号、笔记、额度数据和已存储的音频文件。这个操作不能撤销。</div></div>',
+            unsafe_allow_html=True,
+        )
+        impact_cols = st.columns(4)
+        impact_cols[0].metric("将删除账号", "1 个")
+        impact_cols[1].metric("将删除笔记", f"{len(notes)} 条")
+        impact_cols[2].metric("将删除额度记录", f"{len(transactions) + len(payments)} 条")
+        impact_cols[3].metric("将删除音频文件", f"{audio_file_count} 个")
+        confirm_email = st.text_input(
+            f"输入用户邮箱确认：{user.get('email', '')}",
+            key=f"delete_email_confirm_{selected_user_id}",
+        )
+        confirm_delete = st.text_input(
+            "再输入 DELETE 启用删除按钮。",
+            key=f"delete_confirm_{selected_user_id}",
+        )
+        delete_disabled = (
+            confirm_email != user.get("email", "")
+            or confirm_delete != "DELETE"
+            or user.get("id") == st.session_state.current_user.get("id")
+        )
+        if user.get("id") == st.session_state.current_user.get("id"):
+            st.caption("不能在这里删除当前登录的管理员账号。")
+        if st.button("永久删除账号和关联数据", disabled=delete_disabled, use_container_width=True):
+            res = api_request("DELETE", f"/admin/users/{selected_user_id}", timeout=60)
             if res.status_code == 200:
-                st.success("额度已更新。")
-                detail_res = api_request("GET", f"/admin/users/{selected_user_id}", timeout=60)
-                if detail_res.status_code == 200:
-                    st.session_state.admin_user_detail = detail_res.json()
+                st.success("用户数据已删除。")
                 st.session_state.pop("admin_users_cache", None)
+                st.session_state.pop("admin_user_detail", None)
                 st.rerun()
             else:
-                st.error(f"额度更新失败：{auth_error_message(res)}")
-
-    st.download_button(
-        "下载用户数据导出",
-        data=json.dumps(detail, ensure_ascii=False, indent=2),
-        file_name=f"flashofthought-user-{selected_user_id}.json",
-        mime="application/json",
-        use_container_width=True,
-    )
-
-    with st.expander("额度流水", expanded=False):
-        if transactions:
-            st.dataframe(transactions, use_container_width=True, hide_index=True)
-        else:
-            st.info("暂无额度流水。")
-
-    with st.expander("笔记", expanded=False):
-        if notes:
-            for note in notes:
-                meta = note.get("metadata", {})
-                st.markdown(f"**{meta.get('title', '无标题')}**")
-                st.caption(f"{note.get('id')} | {meta.get('created_at', '')}")
-                st.write(meta.get("summary", ""))
-        else:
-            st.info("暂无笔记。")
-
-    st.markdown("### 删除账号")
-    st.warning("删除后会移除该用户账号、笔记、额度数据和已存储的音频文件。这个操作不能撤销。")
-    confirm_email = st.text_input(
-        f"输入用户邮箱确认：{user.get('email', '')}",
-        key=f"delete_email_confirm_{selected_user_id}",
-    )
-    confirm_delete = st.text_input(
-        "再输入 DELETE 启用删除按钮。",
-        key=f"delete_confirm_{selected_user_id}",
-    )
-    delete_disabled = (
-        confirm_email != user.get("email", "")
-        or confirm_delete != "DELETE"
-        or user.get("id") == st.session_state.current_user.get("id")
-    )
-    if user.get("id") == st.session_state.current_user.get("id"):
-        st.caption("不能在这里删除当前登录的管理员账号。")
-    if st.button("永久删除账号和关联数据", disabled=delete_disabled, use_container_width=True):
-        res = api_request("DELETE", f"/admin/users/{selected_user_id}", timeout=60)
-        if res.status_code == 200:
-            st.success("用户数据已删除。")
-            st.session_state.pop("admin_users_cache", None)
-            st.session_state.pop("admin_user_detail", None)
-            st.rerun()
-        else:
-            st.error(f"删除失败：{auth_error_message(res)}")
+                st.error(f"删除失败：{auth_error_message(res)}")
 
 
 initialize_auth_state()
@@ -1087,10 +1484,13 @@ with st.sidebar:
     }
     if st.session_state.current_user.get("is_admin"):
         page_options["admin"] = "🛠️ 后台管理"
+    requested_page = st.session_state.pop("nav_page", None)
+    page_index = list(page_options.keys()).index(requested_page) if requested_page in page_options else 0
     page_selection = st.radio(
         "选择模式", 
         options=list(page_options.keys()), 
         format_func=lambda x: page_options[x],
+        index=page_index,
         label_visibility="collapsed"
     )
     
@@ -1320,16 +1720,11 @@ elif page_selection == "record_idea":
     display_note()
     
     if "current_note" not in st.session_state or not st.session_state.current_note:
-        st.markdown(
-            """
-            <div class="capture-strip">
-                <div class="capture-stat"><strong>文字输入</strong><span>适合直接整理脑中的想法草稿</span></div>
-                <div class="capture-stat"><strong>麦克风录音</strong><span>适合现场快速记录，还能重新录制</span></div>
-                <div class="capture-stat"><strong>上传文件</strong><span>适合会议录音、语音备忘和已有音频</span></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        render_tool_cards([
+            {"title": "文字输入", "copy": "适合直接整理脑中的想法草稿，片段、要点或随手记都可以。"},
+            {"title": "麦克风录音", "copy": "适合现场快速记录，录完确认后再处理，不满意可以重新录制。"},
+            {"title": "上传文件", "copy": "适合会议录音、语音备忘和已有音频，上传后自动转写再结构化。"},
+        ])
         tab1, tab2, tab3 = st.tabs(["📝 文字输入", "🎤 麦克风录音", "📤 上传文件"])
     
         with tab1:
@@ -1413,7 +1808,7 @@ elif page_selection == "knowledge_review":
                 unsafe_allow_html=True,
             )
             st.markdown(
-                '<div class="section-copy">最近记录的灵感会优先显示；展开后可编辑、删除或继续做 AI 分析。</div>',
+                '<div class="section-copy">最近记录的灵感会优先显示；先扫列表，再选择一条查看详情、编辑或继续做 AI 分析。</div>',
                 unsafe_allow_html=True,
             )
     with col_refresh:
@@ -1436,11 +1831,133 @@ elif page_selection == "knowledge_review":
 
     if notes is not None:
         if not notes:
-            st.info("还没有笔记，快去录入一些想法吧！")
+            st.markdown('<div class="empty-panel">还没有笔记。去“录入想法”捕捉第一条灵感后，这里会出现可搜索、可分析的知识库。</div>', unsafe_allow_html=True)
         else:
+            tag_set = set()
+            analyzed_count = 0
+            for item in notes:
+                meta = item.get("metadata", {}) or {}
+                tags_value = meta.get("tags", "")
+                if isinstance(tags_value, str):
+                    tag_set.update([tag.strip() for tag in tags_value.split(",") if tag.strip()])
+                if any(key in meta for key in ["expanded_idea", "roadmap", "score"]):
+                    analyzed_count += 1
+            render_metric_grid([
+                {"label": "最近笔记", "value": f"{len(notes)} 条", "note": "按创建时间倒序展示"},
+                {"label": "标签数", "value": f"{len(tag_set)} 个", "note": "来自当前加载的最近笔记"},
+                {"label": "已分析", "value": f"{analyzed_count} 条", "note": "包含扩展、路线或评分"},
+            ])
+            note_rows = []
+            note_lookup = {}
             for note in notes:
+                meta = note.get("metadata", {}) or {}
+                note_id = note.get("id")
+                tags_value = meta.get("tags", "")
+                if isinstance(tags_value, str):
+                    tags_list = [tag.strip() for tag in tags_value.split(",") if tag.strip()]
+                elif isinstance(tags_value, list):
+                    tags_list = [str(tag).strip() for tag in tags_value if str(tag).strip()]
+                else:
+                    tags_list = []
+                analysis_status = []
+                if meta.get("expanded_idea"):
+                    analysis_status.append("扩展")
+                if meta.get("roadmap"):
+                    analysis_status.append("路线")
+                if meta.get("score"):
+                    analysis_status.append("评分")
+                note_lookup[note_id] = note
+                note_rows.append({
+                    "标题": meta.get("title", "无标题"),
+                    "标签": tags_list,
+                    "创建时间": str(meta.get("created_at", ""))[:19].replace("T", " "),
+                    "摘要": meta.get("summary", ""),
+                    "正文": note.get("document", ""),
+                    "分析": analysis_status,
+                    "ID": note_id,
+                })
+
+            filter_col_search, filter_col_tag, filter_col_status = st.columns([2, 2, 1])
+            with filter_col_search:
+                review_query = st.text_input(
+                    "搜索笔记",
+                    placeholder="搜索标题、摘要、正文或标签",
+                    key="review_note_query",
+                )
+            with filter_col_tag:
+                selected_tags = st.multiselect(
+                    "按标签筛选",
+                    options=sorted(tag_set),
+                    key="review_note_tags",
+                )
+            with filter_col_status:
+                analysis_filter = st.selectbox(
+                    "分析状态",
+                    ["全部", "已分析", "未分析"],
+                    key="review_note_analysis_filter",
+                )
+
+            query = review_query.strip().lower()
+            filtered_note_rows = []
+            for row in note_rows:
+                haystack = " ".join([
+                    str(row["标题"]),
+                    str(row["摘要"]),
+                    str(row["正文"]),
+                    " ".join(row["标签"]),
+                ]).lower()
+                matches_query = not query or query in haystack
+                matches_tags = not selected_tags or all(tag in row["标签"] for tag in selected_tags)
+                matches_analysis = (
+                    analysis_filter == "全部"
+                    or (analysis_filter == "已分析" and row["分析"])
+                    or (analysis_filter == "未分析" and not row["分析"])
+                )
+                if matches_query and matches_tags and matches_analysis:
+                    filtered_note_rows.append(row)
+
+            if not filtered_note_rows:
+                st.markdown('<div class="empty-panel">没有找到匹配的笔记。换个关键词、减少标签筛选，或去录入新的想法。</div>', unsafe_allow_html=True)
+                selected_note_id = None
+            else:
+                st.caption(f"已筛选出 {len(filtered_note_rows)} / {len(note_rows)} 条笔记")
+                if len(filtered_note_rows) > 5:
+                    st.caption("列表最多显示 5 条，继续向下滚动可查看更多笔记。")
+                filtered_note_ids = [row["ID"] for row in filtered_note_rows]
+                if st.session_state.get("selected_review_note_id") not in filtered_note_ids:
+                    st.session_state.selected_review_note_id = filtered_note_ids[0]
+
+                list_height = min(len(filtered_note_rows), 5) * 123 + 8
+                with st.container(height=list_height, border=False):
+                    for row in filtered_note_rows:
+                        is_active = row["ID"] == st.session_state.get("selected_review_note_id")
+                        row_class = "note-list-row active" if is_active else "note-list-row"
+                        tags_html = "".join([f'<span class="note-chip">#{html.escape(tag)}</span>' for tag in row["标签"][:5]])
+                        analysis_html = "".join([f'<span class="note-chip analysis-chip">{html.escape(status)}</span>' for status in row["分析"]])
+                        if not analysis_html:
+                            analysis_html = '<span class="note-chip analysis-chip">未分析</span>'
+                        summary = html.escape(str(row["摘要"] or "暂无摘要"))
+                        if len(summary) > 120:
+                            summary = f"{summary[:120]}..."
+                        col_note, col_open = st.columns([5, 1])
+                        with col_note:
+                            st.markdown(
+                                f'<div class="{row_class}">'
+                                f'<div class="note-row-top"><div class="note-row-title">{html.escape(str(row["标题"]))}</div><div class="note-row-time">{html.escape(str(row["创建时间"]))}</div></div>'
+                                f'<div class="note-row-summary">{summary}</div>'
+                                f'<div class="note-row-meta">{tags_html}{analysis_html}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with col_open:
+                            st.write("")
+                            if st.button("查看", key=f"select_review_note_{row['ID']}", disabled=is_active, use_container_width=True):
+                                st.session_state.selected_review_note_id = row["ID"]
+
+                selected_note_id = st.session_state.selected_review_note_id
+            for note in ([note_lookup[selected_note_id]] if selected_note_id else []):
                         meta = note.get("metadata", {})
-                        with st.expander(f"📝 {meta.get('title', '无标题')}"):
+                        with st.expander(f"📝 当前笔记：{meta.get('title', '无标题')}", expanded=True):
                             st.caption(f"📅 创建时间: {meta.get('created_at', '未知')}")
                             
                             # Edit Mode Toggle
@@ -1716,6 +2233,11 @@ elif page_selection == "knowledge_review":
     st.divider()
     st.markdown('<div class="section-label">知识工具</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-copy">搜索、聊天和周报不会自动刷新笔记列表；需要更新时点击上方刷新。</div>', unsafe_allow_html=True)
+    render_tool_cards([
+        {"title": "智能搜索", "copy": "用自然语言找回相关笔记，适合定位某个旧想法或会议片段。"},
+        {"title": "聊天回顾", "copy": "基于你的知识库问答，回答会带上参考笔记，方便追溯来源。"},
+        {"title": "AI 周报", "copy": "按 7、14 或 30 天汇总主题、重点想法和阶段性关注点。"},
+    ])
 
     tab_search, tab_chat, tab_summary = st.tabs(["🔎 智能搜索", "💬 聊天回顾", "📊 AI周报"])
 
@@ -1896,8 +2418,29 @@ elif page_selection == "knowledge_graph":
             edges_data = data.get("edges", [])
 
             if not nodes_data:
-                st.info("暂无数据，请先录入一些想法。")
+                st.markdown(
+                    '<div class="empty-panel">暂无图谱数据。先录入一条想法，系统会根据笔记标题、摘要和标签生成可探索的关系图。</div>',
+                    unsafe_allow_html=True,
+                )
+                if st.button("去录入想法", type="primary"):
+                    st.session_state.nav_page = "record_idea"
+                    st.rerun()
             else:
+                tag_nodes = [node for node in nodes_data if node.get("category") == "Tag"]
+                note_nodes = [node for node in nodes_data if node.get("category") == "Note"]
+                render_metric_grid([
+                    {"label": "笔记节点", "value": f"{len(note_nodes)} 个", "note": "知识图谱中的内容实体"},
+                    {"label": "标签节点", "value": f"{len(tag_nodes)} 个", "note": "用于发现主题聚类"},
+                    {"label": "关系连接", "value": f"{len(edges_data)} 条", "note": "笔记、标签与核心节点的连接"},
+                ])
+                st.markdown(
+                    '<div class="graph-legend">'
+                    '<div class="graph-legend-item"><span class="graph-dot core"></span><span><b>核心节点</b><br>整张图的中心，帮助聚合全部知识关系。</span></div>'
+                    '<div class="graph-legend-item"><span class="graph-dot note"></span><span><b>笔记节点</b><br>每条录入内容，点击后可查看它连接到哪些主题。</span></div>'
+                    '<div class="graph-legend-item"><span class="graph-dot tag"></span><span><b>标签节点</b><br>从笔记标签抽取的主题，用来发现重复关注点。</span></div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
                 # Layout Control
                 st.markdown('<div class="graph-toolbar">', unsafe_allow_html=True)
                 col_controls = st.columns([1, 1, 1, 3])
