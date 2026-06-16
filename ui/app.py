@@ -12,7 +12,7 @@ import numpy as np
 from pathlib import Path
 import streamlit.components.v1 as components
 from streamlit_echarts import st_echarts
-from utils import save_analysis_result
+from utils import save_analysis_result, parse_list_from_doc
 # from streamlit_agraph import agraph, Node, Edge, Config # Replaced with PyDeck for 3D
 
 try:
@@ -1066,6 +1066,29 @@ def load_notes(limit=20, use_cache=True):
     return notes
 
 
+def split_tags_text(tags_text):
+    if isinstance(tags_text, list):
+        return [str(tag).strip() for tag in tags_text if str(tag).strip()]
+    return [tag.strip() for tag in str(tags_text).replace("，", ",").split(",") if tag.strip()]
+
+
+def tags_to_text(tags_value):
+    return ", ".join(split_tags_text(tags_value))
+
+
+def build_note_update_payload(note, tags):
+    meta = note.get("metadata", {}) or {}
+    document_text = note.get("document", "")
+    return {
+        "title": meta.get("title", ""),
+        "summary": meta.get("summary", ""),
+        "core_ideas": parse_list_from_doc(document_text, "Core Ideas"),
+        "key_features": parse_list_from_doc(document_text, "Key Features"),
+        "possible_applications": parse_list_from_doc(document_text, "Applications"),
+        "tags": tags,
+    }
+
+
 def load_graph_data(use_cache=True):
     cache_key = "graph_data_cache"
     cached = st.session_state.get(cache_key)
@@ -1939,7 +1962,7 @@ elif page_selection == "knowledge_review":
                         summary = html.escape(str(row["摘要"] or "暂无摘要"))
                         if len(summary) > 120:
                             summary = f"{summary[:120]}..."
-                        col_note, col_open = st.columns([5, 1])
+                        col_note, col_open, col_tags = st.columns([5, 1, 1])
                         with col_note:
                             st.markdown(
                                 f'<div class="{row_class}">'
@@ -1953,6 +1976,44 @@ elif page_selection == "knowledge_review":
                             st.write("")
                             if st.button("查看", key=f"select_review_note_{row['ID']}", disabled=is_active, use_container_width=True):
                                 st.session_state.selected_review_note_id = row["ID"]
+                        with col_tags:
+                            st.write("")
+                            quick_tag_key = f"quick_tag_edit_{row['ID']}"
+                            if st.button("标签", key=f"toggle_quick_tags_{row['ID']}", use_container_width=True):
+                                st.session_state[quick_tag_key] = not st.session_state.get(quick_tag_key, False)
+                                st.session_state.selected_review_note_id = row["ID"]
+                                st.rerun()
+
+                        if st.session_state.get(f"quick_tag_edit_{row['ID']}", False):
+                            with st.form(key=f"quick_tag_form_{row['ID']}"):
+                                quick_tags = st.text_input(
+                                    "标签 (逗号分隔)",
+                                    value=tags_to_text(row["标签"]),
+                                    key=f"quick_tags_input_{row['ID']}",
+                                )
+                                save_tags, cancel_tags = st.columns([1, 1])
+                                with save_tags:
+                                    submitted_tags = st.form_submit_button("保存标签", use_container_width=True)
+                                with cancel_tags:
+                                    cancelled_tags = st.form_submit_button("取消", use_container_width=True)
+
+                                if submitted_tags:
+                                    try:
+                                        updated_note = build_note_update_payload(note_lookup[row["ID"]], split_tags_text(quick_tags))
+                                        upd_res = api_request("PUT", f"/notes/{row['ID']}", json=updated_note)
+                                        if upd_res.status_code == 200:
+                                            invalidate_notes_cache()
+                                            st.toast("标签已保存!")
+                                            st.session_state[quick_tag_key] = False
+                                            time.sleep(1)
+                                            st.rerun()
+                                        else:
+                                            st.error("标签保存失败")
+                                    except Exception as e:
+                                        st.error(str(e))
+                                elif cancelled_tags:
+                                    st.session_state[quick_tag_key] = False
+                                    st.rerun()
 
                 selected_note_id = st.session_state.selected_review_note_id
             for note in ([note_lookup[selected_note_id]] if selected_note_id else []):
