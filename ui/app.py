@@ -1535,16 +1535,16 @@ def get_audio_payload_and_signature(audio_data):
     return payload, hashlib.sha256(payload).hexdigest()
 
 
-def process_audio(audio_data, file_name, file_type="audio/mp3"):
+def process_uploaded_file(file_data, file_name, file_type="application/octet-stream"):
     """
-    Handle audio processing: Upload -> Transcribe -> Structure -> Display
+    Handle file processing: Upload -> Extract text -> Structure -> Display
     """
-    with st.spinner("🚀 正在上传并转写音频..."):
+    with st.spinner("🚀 正在上传并读取文件..."):
         try:
-            payload, audio_signature = get_audio_payload_and_signature(audio_data)
+            payload, audio_signature = get_audio_payload_and_signature(file_data)
             processed_signatures = st.session_state.setdefault("processed_audio_signatures", set())
             if audio_signature in processed_signatures:
-                st.warning("这段音频已经处理过，避免重复扣额度。需要重新处理请重新选择文件或重新录音。")
+                st.warning("这个文件已经处理过，避免重复扣额度。需要重新处理请重新选择文件。")
                 return
 
             # 1. Upload
@@ -1556,10 +1556,10 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                 raw_text = upload_data.get("raw_text", "")
                 file_url = upload_data.get("file_url", "")
                 if not raw_text.strip():
-                    st.error("转写结果为空，请重录或上传更清晰的音频")
+                    st.error("没有提取到可整理的文字")
                     return
                 
-                st.toast("✅ 转写完成!", icon="🎉")
+                st.toast("✅ 文件读取完成!", icon="🎉")
                 
                 # 2. Structure
                 with st.spinner("🧠 正在整理笔记结构..."):
@@ -1581,6 +1581,10 @@ def process_audio(audio_data, file_name, file_type="audio/mp3"):
                 st.error(f"上传失败: {auth_error_message(upload_res)}")
         except Exception as e:
             st.error(f"发生错误: {str(e)}")
+
+
+def process_audio(audio_data, file_name, file_type="audio/mp3"):
+    process_uploaded_file(audio_data, file_name, file_type)
 
 def process_text_input(text):
     """
@@ -1793,13 +1797,17 @@ elif page_selection == "record_idea":
                         st.rerun()
 
         with tab3:
-            st.markdown('<div class="section-label">从音频文件开始</div>', unsafe_allow_html=True)
-            st.markdown('<div class="section-copy">上传后会先转写，再整理为标题、摘要、要点和应用场景。</div>', unsafe_allow_html=True)
-            audio_file = st.file_uploader("拖拽或选择音频文件", type=['mp3', 'wav', 'm4a', 'aac'])
-            if audio_file:
-                st.audio(audio_file)
+            st.markdown('<div class="section-label">从文件开始</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-copy">音频会先转写；txt、md、pdf、docx 会先提取文字，再整理为标题、摘要、要点和应用场景。</div>', unsafe_allow_html=True)
+            uploaded_file = st.file_uploader("拖拽或选择文件", type=['mp3', 'wav', 'm4a', 'aac', 'txt', 'md', 'pdf', 'docx', 'doc'])
+            if uploaded_file:
+                file_extension = uploaded_file.name.rsplit(".", 1)[-1].lower() if "." in uploaded_file.name else ""
+                if file_extension in {"mp3", "wav", "m4a", "aac"}:
+                    st.audio(uploaded_file)
+                else:
+                    st.caption(f"已选择：{uploaded_file.name}")
                 if st.button("开始处理 (文件)", type="primary"):
-                    process_audio(audio_file, audio_file.name)
+                    process_uploaded_file(uploaded_file, uploaded_file.name, uploaded_file.type or "application/octet-stream")
                     st.rerun()
 
 elif page_selection == "knowledge_review":

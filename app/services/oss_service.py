@@ -43,12 +43,12 @@ class OssService:
         scheme = parsed.scheme or "https"
         return f"{scheme}://{hostname}"
         
-    def upload_file(self, file_content: bytes, file_extension: str = "mp3", user_id: str = "") -> str:
+    def upload_file(self, file_content: bytes, file_extension: str = "mp3", user_id: str = "", category: str = "audio") -> str:
         """
         Upload bytes to OSS or Local and return the file key (path)
         """
         filename = f"{int(time.time())}_{uuid.uuid4().hex[:8]}.{file_extension}"
-        object_key = f"audio/{user_id}/{filename}" if user_id else filename
+        object_key = f"{category}/{user_id}/{filename}" if user_id else filename
         
         if self.mode == 'oss':
             result = self.bucket.put_object(object_key, file_content)
@@ -86,23 +86,24 @@ class OssService:
         return f"https://{settings.OSS_BUCKET_AUDIO}.{endpoint_host}/{object_key}"
 
     def delete_user_files(self, user_id: str) -> int:
-        prefix = f"audio/{user_id}/"
+        prefixes = [f"audio/{user_id}/", f"documents/{user_id}/"]
         if self.mode == 'oss':
             deleted_count = 0
-            for obj in oss2.ObjectIterator(self.bucket, prefix=prefix):
-                self.bucket.delete_object(obj.key)
-                deleted_count += 1
+            for prefix in prefixes:
+                for obj in oss2.ObjectIterator(self.bucket, prefix=prefix):
+                    self.bucket.delete_object(obj.key)
+                    deleted_count += 1
             return deleted_count
 
-        user_path = os.path.abspath(os.path.join(self.local_storage_path, "audio", user_id))
         storage_root = os.path.abspath(self.local_storage_path)
-        if not user_path.startswith(storage_root + os.sep) or not os.path.isdir(user_path):
-            return 0
-
         deleted_count = 0
-        for _, _, files in os.walk(user_path):
-            deleted_count += len(files)
-        shutil.rmtree(user_path)
+        for category in ("audio", "documents"):
+            user_path = os.path.abspath(os.path.join(self.local_storage_path, category, user_id))
+            if not user_path.startswith(storage_root + os.sep) or not os.path.isdir(user_path):
+                continue
+            for _, _, files in os.walk(user_path):
+                deleted_count += len(files)
+            shutil.rmtree(user_path)
         return deleted_count
 
 # Singleton instance

@@ -1,7 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Body, Query
 import re
+from pathlib import Path
 from app.services.oss_service import oss_service
 from app.services.llm_service import llm_service
+from app.services.document_service import document_service
 from app.services.rag_service import rag_service
 from app.services.auth_service import get_current_user
 from app.services.billing_service import billing_service
@@ -19,6 +21,9 @@ CREDIT_COSTS = {
     "chat": 1,
     "weekly_summary": 5,
 }
+
+AUDIO_EXTENSIONS = {"mp3", "wav", "m4a", "aac"}
+DOCUMENT_EXTENSIONS = {"txt", "md", "pdf", "docx", "doc"}
 
 
 def invalidate_graph_cache(user_id: str):
@@ -47,33 +52,43 @@ async def list_billing_plans(current_user: Dict[str, Any] = Depends(get_current_
 async def create_mock_payment(plan_id: str = Body(..., embed=True), current_user: Dict[str, Any] = Depends(get_current_user)):
     return billing_service.create_mock_payment(current_user["id"], plan_id)
 
-@router.post("/upload", summary="Upload audio and transcribe")
+@router.post("/upload", summary="Upload a file and extract text")
 async def upload_audio(file: UploadFile = File(...), current_user: Dict[str, Any] = Depends(get_current_user)):
     """
-    Upload audio file to OSS and transcribe it using ASR.
+    Upload audio or document files and extract raw text.
     """
     try:
         billing_service.ensure_credits(current_user["id"], CREDIT_COSTS["upload"] + CREDIT_COSTS["process"])
-        # Read file content
         content = await file.read()
-        file_extension = file.filename.split(".")[-1] if "." in file.filename else "mp3"
+        filename = file.filename or ""
+        file_extension = Path(filename).suffix.lower().lstrip(".")
+        if not file_extension:
+            raise HTTPException(status_code=422, detail="无法识别文件类型")
+        if file_extension not in AUDIO_EXTENSIONS and file_extension not in DOCUMENT_EXTENSIONS:
+            raise HTTPException(status_code=422, detail="仅支持 mp3、wav、m4a、aac、txt、md、pdf、docx 文件")
         
-        # Upload to OSS
-        file_key = oss_service.upload_file(content, file_extension, user_id=current_user["id"])
+        category = "audio" if file_extension in AUDIO_EXTENSIONS else "documents"
+        file_key = oss_service.upload_file(content, file_extension, user_id=current_user["id"], category=category)
         file_url = oss_service.get_file_url(file_key)
         
-        # Transcribe
-        transcription = llm_service.transcribe_audio(file_url)
-        if not transcription.strip():
-            raise HTTPException(status_code=422, detail="语音转写结果为空，请重录或上传更清晰的音频")
+        if file_extension in AUDIO_EXTENSIONS:
+            raw_text = llm_service.transcribe_audio(file_url)
+            if not raw_text.strip():
+                raise HTTPException(status_code=422, detail="语音转写结果为空，请重录或上传更清晰的音频")
+        else:
+            raw_text = document_service.extract_text(content, filename)
+            if not raw_text.strip():
+                raise HTTPException(status_code=422, detail="文件中没有提取到可整理的文字")
         
         return {
             "file_key": file_key,
             "file_url": file_url,
-            "raw_text": transcription
+            "raw_text": raw_text
         }
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
