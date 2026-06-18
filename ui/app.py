@@ -5,6 +5,7 @@ import os
 import time
 import hashlib
 import html
+from datetime import datetime, timedelta, timezone
 import plotly.graph_objects as go
 import networkx as nx
 import pandas as pd
@@ -26,6 +27,21 @@ def normalize_api_base_url(raw_url):
     if not base_url.endswith("/api/v1"):
         base_url = f"{base_url}/api/v1"
     return base_url
+
+
+BEIJING_TIMEZONE = timezone(timedelta(hours=8))
+
+
+def format_beijing_time(value):
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(BEIJING_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return str(value)
 
 
 API_BASE_URL = normalize_api_base_url(os.getenv("API_BASE_URL", "http://localhost:8000/api/v1"))
@@ -1233,7 +1249,7 @@ def render_billing_page():
         amount = int(item.get("amount", 0))
         amount_text = f"+{amount}" if amount > 0 else str(amount)
         amount_class = "positive" if amount > 0 else "negative"
-        created_at = item.get("created_at", "")[:19].replace("T", " ")
+        created_at = format_beijing_time(item.get("created_at"))
         st.markdown(
             f'<div class="transaction-row">'
             f'<div class="transaction-amount {amount_class}">{amount_text} 点</div>'
@@ -1418,7 +1434,11 @@ def render_admin_page():
     with tab_records:
         with st.expander("额度流水", expanded=True):
             if transactions:
-                st.dataframe(transactions, use_container_width=True, hide_index=True)
+                display_transactions = [
+                    {**item, "created_at": format_beijing_time(item.get("created_at"))}
+                    for item in transactions
+                ]
+                st.dataframe(display_transactions, use_container_width=True, hide_index=True)
             else:
                 st.info("暂无额度流水。")
 
