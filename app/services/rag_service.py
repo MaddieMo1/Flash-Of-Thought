@@ -2,6 +2,7 @@ import json
 import time
 import uuid
 import os
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from app.core.config import get_settings
 from app.services.llm_service import llm_service
@@ -231,7 +232,7 @@ class RagService:
             try:
                 ts = int(ts_val)
                 if ts > 0:
-                    item['metadata']['created_at'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
+                    item['metadata']['created_at'] = datetime.fromtimestamp(ts, timezone.utc).isoformat()
             except ValueError:
                 # Assume it's already a string or formatted
                 pass
