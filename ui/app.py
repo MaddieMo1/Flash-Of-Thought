@@ -36,11 +36,15 @@ def format_beijing_time(value):
     if not value:
         return ""
     try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        text = str(value).strip()
+        if text.isdigit():
+            parsed = datetime.fromtimestamp(int(text), tz=timezone.utc)
+        else:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(BEIJING_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
-    except (TypeError, ValueError):
+    except (OSError, OverflowError, TypeError, ValueError):
         return str(value)
 
 
@@ -1336,7 +1340,7 @@ def render_admin_page():
             "当前额度": user.get("balance"),
             "累计消耗": user.get("total_spent"),
             "管理员": user.get("is_admin", False),
-            "创建时间": str(user.get("created_at", ""))[:19].replace("T", " "),
+            "创建时间": format_beijing_time(user.get("created_at")),
         }
         for user in visible_users
     ]
@@ -1447,7 +1451,7 @@ def render_admin_page():
                 for note in notes:
                     meta = note.get("metadata", {})
                     st.markdown(f"**{meta.get('title', '无标题')}**")
-                    st.caption(f"{note.get('id')} | {meta.get('created_at', '')}")
+                    st.caption(f"{note.get('id')} | {format_beijing_time(meta.get('created_at'))}")
                     st.write(meta.get("summary", ""))
             else:
                 st.info("暂无笔记。")
@@ -1921,7 +1925,7 @@ elif page_selection == "knowledge_review":
                 note_rows.append({
                     "标题": meta.get("title", "无标题"),
                     "标签": tags_list,
-                    "创建时间": str(meta.get("created_at", ""))[:19].replace("T", " "),
+                    "创建时间": format_beijing_time(meta.get("created_at")),
                     "摘要": meta.get("summary", ""),
                     "正文": note.get("document", ""),
                     "分析": analysis_status,
@@ -2047,7 +2051,7 @@ elif page_selection == "knowledge_review":
             for note in ([note_lookup[selected_note_id]] if selected_note_id else []):
                         meta = note.get("metadata", {})
                         with st.expander(f"📝 当前笔记：{meta.get('title', '无标题')}", expanded=True):
-                            st.caption(f"📅 创建时间: {meta.get('created_at', '未知')}")
+                            st.caption(f"📅 创建时间: {format_beijing_time(meta.get('created_at')) or '未知'}")
                             
                             # Edit Mode Toggle
                             if f"edit_mode_{note.get('id')}" not in st.session_state:
@@ -2407,7 +2411,7 @@ elif page_selection == "knowledge_review":
                                 score = res.get("score", 0)
                                 
                                 with st.expander(f"📄 {meta.get('title', '无标题')} (相似度: {score:.2f})"):
-                                    st.caption(f"📅 创建时间: {meta.get('created_at', '未知')}")
+                                    st.caption(f"📅 创建时间: {format_beijing_time(meta.get('created_at')) or '未知'}")
                                     st.markdown(f"**摘要**: {meta.get('summary', '')}")
                                     st.markdown(f"**标签**: {meta.get('tags', '')}")
                                     st.markdown("---")
