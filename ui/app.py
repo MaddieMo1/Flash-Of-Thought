@@ -757,14 +757,19 @@ st.markdown("""
         font-weight: 750;
     }
     .danger-panel {
+        display: block;
+        width: 100%;
         margin-top: 0.75rem;
+        margin-bottom: 1.25rem;
         padding: 1rem;
         border-radius: 12px;
         background: rgba(127, 29, 29, 0.24);
         border: 1px solid rgba(248, 113, 113, 0.35);
     }
     .danger-panel strong {
+        display: block;
         color: #FEE2E2;
+        margin-bottom: 0.35rem;
     }
     .graph-legend {
         display: grid;
@@ -1268,7 +1273,7 @@ def render_billing_page():
 
 def render_admin_page():
     render_page_header(
-        "后台管理",
+        "DATA",
         "用户数据管理",
         "面向运营维护的控制台：快速定位用户、调整额度、导出记录，并用双确认保护删除操作。",
     )
