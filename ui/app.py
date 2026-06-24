@@ -771,6 +771,17 @@ st.markdown("""
         color: #FEE2E2;
         margin-bottom: 0.35rem;
     }
+    div[data-testid="stVerticalBlock"] div[data-testid="stElementContainer"]:has(.danger-delete-ready) ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] button {
+        background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%) !important;
+        border-color: rgba(248, 113, 113, 0.65) !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 6px 18px rgba(239, 68, 68, 0.3);
+    }
+    div[data-testid="stVerticalBlock"] div[data-testid="stElementContainer"]:has(.danger-delete-ready) ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] button:hover {
+        background: linear-gradient(135deg, #F87171 0%, #EF4444 100%) !important;
+        border-color: rgba(252, 165, 165, 0.8) !important;
+        box-shadow: 0 8px 24px rgba(239, 68, 68, 0.42);
+    }
     .graph-legend {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1487,6 +1498,8 @@ def render_admin_page():
         )
         if user.get("id") == st.session_state.current_user.get("id"):
             st.caption("不能在这里删除当前登录的管理员账号。")
+        if not delete_disabled:
+            st.markdown('<div class="danger-delete-ready"></div>', unsafe_allow_html=True)
         if st.button("永久删除账号和关联数据", disabled=delete_disabled, use_container_width=True):
             res = api_request("DELETE", f"/admin/users/{selected_user_id}", timeout=60)
             if res.status_code == 200:
